@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: app-contest
+    env: static
+    buildCommand: npm install && node node_modules/vite/bin/vite.js build
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_SUPABASE_PROJECT_ID
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
