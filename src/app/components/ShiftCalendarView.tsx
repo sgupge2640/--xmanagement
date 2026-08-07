@@ -276,7 +276,19 @@ export function DesiredShiftsTracker({ applications, dateApplications, dailySche
   const appsWithDesiredShifts = applications.filter(app => app.desired_shifts_per_week);
 
   if (appsWithDesiredShifts.length === 0) {
-    return null;
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <h4 className="font-medium mb-2 flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-blue-600" />
+            週間希望達成度
+          </h4>
+          <p className="text-sm text-gray-600">
+            希望日数が未設定のため、達成率を表示できる応募者がいません。応募時に週の希望回数を設定すると表示されます。
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
