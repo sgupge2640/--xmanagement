@@ -29,6 +29,15 @@ interface AppliedShiftCalendarProps {
   shiftId?: number;
 }
 
+function getSlotRange(slots: { start: string; end: string }[]) {
+  if (!slots || slots.length === 0) return null;
+  const sorted = [...slots].sort((a, b) => a.start.localeCompare(b.start));
+  return {
+    start: sorted[0].start,
+    end: sorted[sorted.length - 1].end,
+  };
+}
+
 export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishedDates = [], approvedSlotsMap: initialSlotsMap, userEmail, shiftId }: AppliedShiftCalendarProps) {
   // KVから最新の採用スロットを取得（親からの初期値より常に最新を優先）
   const [localSlotsMap, setLocalSlotsMap] = useState(initialSlotsMap ?? {});
@@ -234,11 +243,10 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
                   </div>
                   {isApplied && appliedDay && (() => {
                     const kvSlots = userEmail && approvedSlotsMap?.[userEmail]?.[dateStr];
-                    // KVに採用スロットがあれば優先表示、なければDB時間を表示
-                    // 採用済み(approved/direct_approved): DB時間 = 採用スパン
-                    // 未採用(pending): DB時間 = 希望時間
-                    const timeText = kvSlots && kvSlots.length > 0
-                      ? kvSlots.map(s => `${s.start}-${s.end}`).join(' / ')
+                    // 採用通知は「最初の採用開始〜最後の採用終了」で表示
+                    const slotRange = kvSlots && kvSlots.length > 0 ? getSlotRange(kvSlots) : null;
+                    const timeText = slotRange
+                      ? `${slotRange.start}-${slotRange.end}`
                       : `${appliedDay.start_time.slice(0, 5)}-${appliedDay.end_time.slice(0, 5)}`;
                     return (
                       <div className={`absolute bottom-0 left-0 right-0 text-[8px] ${barClass} bg-opacity-80 rounded-b px-0.5 truncate`}>
@@ -321,13 +329,15 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
                   {(() => {
                     const kvSlots = userEmail && approvedSlotsMap?.[userEmail]?.[selectedDate!];
                     if (kvSlots && kvSlots.length > 0) {
-                      return kvSlots.map((s, i) => (
-                        <div key={i} className={`text-lg font-semibold ${
+                      const slotRange = getSlotRange(kvSlots);
+                      if (!slotRange) return null;
+                      return (
+                        <div className={`text-lg font-semibold ${
                           selectedDay.status === 'approved' ? 'text-green-900' : 'text-blue-900'
                         }`}>
-                          {s.start} - {s.end}
+                          {slotRange.start} - {slotRange.end}
                         </div>
-                      ));
+                      );
                     }
                     return (
                       <div className={`text-lg font-semibold ${

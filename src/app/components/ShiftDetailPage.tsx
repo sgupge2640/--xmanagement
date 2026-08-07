@@ -8,8 +8,10 @@ import {
   approveShiftApplication,
   publishShiftResults,
   getGroupMembers,
+  getShiftBreakpoints,
   getApprovedSlotsMap,
   saveApprovedSlotsMap,
+  saveShiftBreakpoints,
   getShiftRoles,
   unapproveShiftApplication,
   type ApprovedSlot,
@@ -69,6 +71,12 @@ interface ShiftDetailData {
     daily_schedule?: DaySchedule[];
   }>;
   is_admin: boolean;
+}
+
+interface CustomBreakpoint {
+  start: string;
+  end: string;
+  name: string;
 }
 
 interface DailyScheduleItem {
@@ -139,6 +147,8 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const [groupMembers, setGroupMembers] = useState<Array<{ user_email: string; user_name: string }>>([]);
   const [approvedSlotsMap, setApprovedSlotsMap] = useState<ApprovedSlotsMap>({});
   const [roles, setRoles] = useState<ShiftRole[]>([]);
+  const [customBreakpoints, setCustomBreakpoints] = useState<CustomBreakpoint[]>([]);
+  const [breakpointInput, setBreakpointInput] = useState('');
 
   const overlaps = (startA: string, endA: string, startB: string, endB: string) => {
     const toMinutes = (t: string) => {
@@ -146,6 +156,60 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       return h * 60 + m;
     };
     return toMinutes(startA) < toMinutes(endB) && toMinutes(endA) > toMinutes(startB);
+  };
+
+  const toMinutes = (time: string) => {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const toTimeString = (minutes: number) => {
+    const h = String(Math.floor(minutes / 60)).padStart(2, '0');
+    const m = String(minutes % 60).padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
+  const parseBreakpointSlots = (raw: string, shiftStart: string, shiftEnd: string) => {
+    const text = raw.trim();
+    if (!text) return { slots: [] as CustomBreakpoint[] };
+
+    const tokens = text
+      .split(/[\s,、]+/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+
+    const valid = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    const boundaryMinutes: number[] = [];
+    for (const token of tokens) {
+      if (!valid.test(token)) {
+        return { slots: [] as CustomBreakpoint[], error: `時刻の形式が不正です: ${token}` };
+      }
+      boundaryMinutes.push(toMinutes(token));
+    }
+
+    const shiftStartMin = toMinutes(shiftStart.slice(0, 5));
+    const shiftEndMin = toMinutes(shiftEnd.slice(0, 5));
+    const uniqueSorted = Array.from(new Set(boundaryMinutes)).sort((a, b) => a - b);
+
+    if (uniqueSorted.some((m) => m <= shiftStartMin || m >= shiftEndMin)) {
+      return {
+        slots: [] as CustomBreakpoint[],
+        error: `区切り時刻はシフト時間内で指定してください（${shiftStart.slice(0, 5)}〜${shiftEnd.slice(0, 5)}）`,
+      };
+    }
+
+    const edges = [shiftStartMin, ...uniqueSorted, shiftEndMin];
+    const slots: CustomBreakpoint[] = [];
+    for (let i = 0; i < edges.length - 1; i += 1) {
+      const start = toTimeString(edges[i]);
+      const end = toTimeString(edges[i + 1]);
+      slots.push({
+        start,
+        end,
+        name: `${start}-${end}`,
+      });
+    }
+    return { slots };
   };
 
   const loadDetail = async () => {
@@ -213,16 +277,23 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
         const targetGroupId = groupId ?? data.shift.group_id;
         try {
-          const [membersData, slotsMap, shiftRoles] = await Promise.all([
+          const [membersData, slotsMap, shiftRoles, breakpoints] = await Promise.all([
             getGroupMembers(targetGroupId),
             getApprovedSlotsMap(shiftId),
             getShiftRoles(shiftId),
+            getShiftBreakpoints(shiftId),
           ]);
           setGroupMembers(membersData.members || []);
           setApprovedSlotsMap(slotsMap || {});
           setRoles(shiftRoles || []);
+          const nextBreakpoints = (breakpoints || []) as CustomBreakpoint[];
+          setCustomBreakpoints(nextBreakpoints);
+          const separators = nextBreakpoints.slice(0, -1).map((slot) => slot.end).join(', ');
+          setBreakpointInput(separators);
         } catch {
           setGroupMembers([]);
+          setCustomBreakpoints([]);
+          setBreakpointInput('');
         }
       }
     } catch (error: any) {
@@ -412,6 +483,34 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     await loadDetail();
   };
 
+  const handleApplyBreakpoints = async () => {
+    if (!detail?.is_admin) return;
+    const parsed = parseBreakpointSlots(breakpointInput, detail.shift.start_time, detail.shift.end_time);
+    if (parsed.error) {
+      toast.error(parsed.error);
+      return;
+    }
+
+    try {
+      await saveShiftBreakpoints(shiftId, parsed.slots);
+      setCustomBreakpoints(parsed.slots);
+      toast.success('区切り時間を更新しました');
+    } catch (error: any) {
+      toast.error(error.message || '区切り時間の保存に失敗しました');
+    }
+  };
+
+  const handleClearBreakpoints = async () => {
+    try {
+      await saveShiftBreakpoints(shiftId, []);
+      setCustomBreakpoints([]);
+      setBreakpointInput('');
+      toast.success('区切り時間をクリアしました');
+    } catch (error: any) {
+      toast.error(error.message || '区切り時間のクリアに失敗しました');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -439,8 +538,10 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const { shift, applications, is_admin } = detail;
   const approvedCount = applications.filter((app) => app.status === 'approved' || app.status === 'partially_approved').length;
   const pendingCount = applications.filter((app) => app.status === 'pending').length;
-  const userApplication = applications.find((app) => app.user_email === localStorage.getItem('user_email'));
+  const currentUserEmail = localStorage.getItem('user_email') || '';
+  const userApplication = applications.find((app) => app.user_email === currentUserEmail);
   const isDeadlinePassed = new Date(shift.application_deadline) < new Date();
+  const parsedPreview = parseBreakpointSlots(breakpointInput, shift.start_time, shift.end_time);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -525,6 +626,9 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                       appliedDays={userApplication.daily_schedule}
                       startDate={shift.start_date}
                       endDate={shift.end_date}
+                      publishedDates={shift.results_published ? null : []}
+                      shiftId={shift.id}
+                      userEmail={currentUserEmail}
                     />
                   </div>
                 )}
@@ -648,15 +752,13 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                     dailySchedules={gridDailySchedules}
                     dateApplications={dateApplications}
                     groupMembers={groupMembers}
-                    customBreakpoints={[]}
+                    customBreakpoints={customBreakpoints}
                     shiftStartTime={shift.start_time}
                     shiftEndTime={shift.end_time}
                     roles={roles}
                     approvedSlotsMap={approvedSlotsMap}
                     wishTimesMap={wishTimesMap}
-                    isAdmin={true}
-                    onApproveSlot={handleApproveSlot}
-                    onUnapproveSlot={handleUnapproveSlot}
+                    isAdmin={false}
                   />
                   <DesiredShiftsTracker
                     applications={applications as any}
@@ -666,12 +768,36 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                 </TabsContent>
 
                 <TabsContent value="result" className="space-y-4 mt-4">
+                  <div className="border rounded-lg p-3 sm:p-4 bg-gray-50 space-y-3">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-800">時間帯の区切り設定</h4>
+                      <p className="text-xs text-gray-600 mt-1">シフト全体の中で区切りたい時刻を入力すると、採用結果一覧がその時間帯単位で採用できる表になります。</p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        value={breakpointInput}
+                        onChange={(e) => setBreakpointInput(e.target.value)}
+                        placeholder="例: 12:00, 15:00"
+                      />
+                      <Button onClick={handleApplyBreakpoints} className="sm:w-auto">区切りを適用</Button>
+                      <Button variant="outline" onClick={handleClearBreakpoints} className="sm:w-auto">区切りをクリア</Button>
+                    </div>
+                    {parsedPreview.error ? (
+                      <p className="text-xs text-red-600">{parsedPreview.error}</p>
+                    ) : (
+                      <p className="text-xs text-gray-600">
+                        プレビュー: {parsedPreview.slots.length > 0
+                          ? parsedPreview.slots.map((slot) => `${slot.start}〜${slot.end}`).join(' / ')
+                          : `${shift.start_time.slice(0, 5)}〜${shift.end_time.slice(0, 5)}（区切りなし）`}
+                      </p>
+                    )}
+                  </div>
                   <ShiftGridView
                     mode="result"
                     dailySchedules={gridDailySchedules}
                     dateApplications={dateApplications}
                     groupMembers={groupMembers}
-                    customBreakpoints={[]}
+                    customBreakpoints={customBreakpoints}
                     shiftStartTime={shift.start_time}
                     shiftEndTime={shift.end_time}
                     roles={roles}
