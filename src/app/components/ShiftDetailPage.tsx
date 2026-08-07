@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { ArrowLeft, Calendar, Clock, MapPin, Users, CheckCircle2, XCircle, AlertCircle, Megaphone } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, MapPin, CheckCircle2, XCircle, AlertCircle, Megaphone } from 'lucide-react';
 import {
   getShiftDetail,
   applyToShift,
@@ -20,15 +20,12 @@ import {
 } from '../lib/api';
 import { toast } from 'sonner';
 import { Badge } from './ui/badge';
-import { Checkbox } from './ui/checkbox';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { AppliedShiftCalendar } from './AppliedShiftCalendar';
 import { ShiftApplicationCalendar } from './ShiftApplicationCalendar';
-import { ShiftCalendarView, DesiredShiftsTracker } from './ShiftCalendarView';
 import { ShiftGridView } from './ShiftGridView';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -134,21 +131,20 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const [detail, setDetail] = useState<ShiftDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
-  const [processingDate, setProcessingDate] = useState<string | null>(null);
   const [dailySchedules, setDailySchedules] = useState<DailyScheduleItem[]>([]);
   const [showApplicationForm, setShowApplicationForm] = useState(false);
-  const [selectedDate, setSelectedDate] = useState('');
   const [dateApplications, setDateApplications] = useState<Record<string, ApplicationForDate[]>>({});
   const [publishingResults, setPublishingResults] = useState(false);
   const [resultsMessage, setResultsMessage] = useState('');
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [desiredShiftsPerWeek, setDesiredShiftsPerWeek] = useState(3);
-  const [adminTab, setAdminTab] = useState('daily');
   const [groupMembers, setGroupMembers] = useState<Array<{ user_email: string; user_name: string }>>([]);
   const [approvedSlotsMap, setApprovedSlotsMap] = useState<ApprovedSlotsMap>({});
   const [roles, setRoles] = useState<ShiftRole[]>([]);
   const [customBreakpoints, setCustomBreakpoints] = useState<CustomBreakpoint[]>([]);
-  const [breakpointInput, setBreakpointInput] = useState('');
+  const [newBreakpointName, setNewBreakpointName] = useState('');
+  const [newBreakpointStart, setNewBreakpointStart] = useState('');
+  const [newBreakpointEnd, setNewBreakpointEnd] = useState('');
 
   const overlaps = (startA: string, endA: string, startB: string, endB: string) => {
     const toMinutes = (t: string) => {
@@ -161,55 +157,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const toMinutes = (time: string) => {
     const [h, m] = time.split(':').map(Number);
     return h * 60 + m;
-  };
-
-  const toTimeString = (minutes: number) => {
-    const h = String(Math.floor(minutes / 60)).padStart(2, '0');
-    const m = String(minutes % 60).padStart(2, '0');
-    return `${h}:${m}`;
-  };
-
-  const parseBreakpointSlots = (raw: string, shiftStart: string, shiftEnd: string) => {
-    const text = raw.trim();
-    if (!text) return { slots: [] as CustomBreakpoint[] };
-
-    const tokens = text
-      .split(/[\s,、]+/)
-      .map((v) => v.trim())
-      .filter(Boolean);
-
-    const valid = /^([01]\d|2[0-3]):([0-5]\d)$/;
-    const boundaryMinutes: number[] = [];
-    for (const token of tokens) {
-      if (!valid.test(token)) {
-        return { slots: [] as CustomBreakpoint[], error: `時刻の形式が不正です: ${token}` };
-      }
-      boundaryMinutes.push(toMinutes(token));
-    }
-
-    const shiftStartMin = toMinutes(shiftStart.slice(0, 5));
-    const shiftEndMin = toMinutes(shiftEnd.slice(0, 5));
-    const uniqueSorted = Array.from(new Set(boundaryMinutes)).sort((a, b) => a - b);
-
-    if (uniqueSorted.some((m) => m <= shiftStartMin || m >= shiftEndMin)) {
-      return {
-        slots: [] as CustomBreakpoint[],
-        error: `区切り時刻はシフト時間内で指定してください（${shiftStart.slice(0, 5)}〜${shiftEnd.slice(0, 5)}）`,
-      };
-    }
-
-    const edges = [shiftStartMin, ...uniqueSorted, shiftEndMin];
-    const slots: CustomBreakpoint[] = [];
-    for (let i = 0; i < edges.length - 1; i += 1) {
-      const start = toTimeString(edges[i]);
-      const end = toTimeString(edges[i + 1]);
-      slots.push({
-        start,
-        end,
-        name: `${start}-${end}`,
-      });
-    }
-    return { slots };
   };
 
   const loadDetail = async () => {
@@ -225,7 +172,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         data.shift.end_time,
       );
       setDailySchedules(schedules);
-      setSelectedDate((current) => current || schedules[0]?.date || '');
 
       if (data.is_admin) {
         const grouped: Record<string, ApplicationForDate[]> = {};
@@ -286,14 +232,12 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
           setGroupMembers(membersData.members || []);
           setApprovedSlotsMap(slotsMap || {});
           setRoles(shiftRoles || []);
-          const nextBreakpoints = (breakpoints || []) as CustomBreakpoint[];
+          const nextBreakpoints = ((breakpoints || []) as CustomBreakpoint[])
+            .sort((a, b) => a.start.localeCompare(b.start));
           setCustomBreakpoints(nextBreakpoints);
-          const separators = nextBreakpoints.slice(0, -1).map((slot) => slot.end).join(', ');
-          setBreakpointInput(separators);
         } catch {
           setGroupMembers([]);
           setCustomBreakpoints([]);
-          setBreakpointInput('');
         }
       }
     } catch (error: any) {
@@ -363,45 +307,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     }
   };
 
-  const handleSelectApplication = (date: string, appId: number, selected: boolean) => {
-    setDateApplications((current) => ({
-      ...current,
-      [date]: (current[date] || []).map((item) => item.id === appId ? { ...item, selected } : item),
-    }));
-  };
-
-  const handleChangeApplicationTime = (date: string, appId: number, field: 'start_time' | 'end_time', value: string) => {
-    setDateApplications((current) => ({
-      ...current,
-      [date]: (current[date] || []).map((item) => item.id === appId ? { ...item, [field]: value } : item),
-    }));
-  };
-
-  const handleApproveSelectedForDate = async (date: string) => {
-    const selectedApps = (dateApplications[date] || []).filter((item) => item.selected && item.status === 'pending');
-    if (selectedApps.length === 0) {
-      toast.error('承認する応募を選択してください');
-      return;
-    }
-
-    setProcessingDate(date);
-    try {
-      for (const app of selectedApps) {
-        await approveShiftApplication(app.id, [{
-          date,
-          start_time: app.start_time,
-          end_time: app.end_time,
-        }]);
-      }
-      toast.success(`${selectedApps.length}件の応募を承認しました`);
-      await loadDetail();
-    } catch (error: any) {
-      toast.error(error.message || '承認に失敗しました');
-    } finally {
-      setProcessingDate(null);
-    }
-  };
-
   const handlePublishResults = async () => {
     setPublishingResults(true);
     try {
@@ -416,7 +321,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     }
   };
 
-  const selectedDayApplications = useMemo(() => dateApplications[selectedDate] || [], [dateApplications, selectedDate]);
   const gridDailySchedules = useMemo(
     () => dailySchedules.map((item) => ({ date: item.date, displayDate: formatDate(item.date) })),
     [dailySchedules],
@@ -483,28 +387,64 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     await loadDetail();
   };
 
-  const handleApplyBreakpoints = async () => {
-    if (!detail?.is_admin) return;
-    const parsed = parseBreakpointSlots(breakpointInput, detail.shift.start_time, detail.shift.end_time);
-    if (parsed.error) {
-      toast.error(parsed.error);
+  const handleAddBreakpoint = () => {
+    const name = newBreakpointName.trim();
+    const start = newBreakpointStart;
+    const end = newBreakpointEnd;
+
+    if (!name || !start || !end) {
+      toast.error('名前・開始・終了をすべて入力してください');
       return;
     }
 
+    const shiftStartMin = toMinutes(detail!.shift.start_time.slice(0, 5));
+    const shiftEndMin = toMinutes(detail!.shift.end_time.slice(0, 5));
+    const startMin = toMinutes(start);
+    const endMin = toMinutes(end);
+
+    if (startMin >= endMin) {
+      toast.error('終了時刻は開始時刻より後にしてください');
+      return;
+    }
+
+    if (startMin < shiftStartMin || endMin > shiftEndMin) {
+      toast.error(`区切りはシフト時間内で設定してください（${detail!.shift.start_time.slice(0, 5)}〜${detail!.shift.end_time.slice(0, 5)}）`);
+      return;
+    }
+
+    const hasOverlap = customBreakpoints.some((slot) => overlaps(start, end, slot.start, slot.end));
+    if (hasOverlap) {
+      toast.error('既存の区切り時間と重複しています');
+      return;
+    }
+
+    const next = [...customBreakpoints, { name, start, end }].sort((a, b) => a.start.localeCompare(b.start));
+    setCustomBreakpoints(next);
+    setNewBreakpointName('');
+    setNewBreakpointStart('');
+    setNewBreakpointEnd('');
+  };
+
+  const handleSaveBreakpoints = async () => {
     try {
-      await saveShiftBreakpoints(shiftId, parsed.slots);
-      setCustomBreakpoints(parsed.slots);
-      toast.success('区切り時間を更新しました');
+      await saveShiftBreakpoints(shiftId, customBreakpoints);
+      toast.success('区切り時間を保存しました');
     } catch (error: any) {
       toast.error(error.message || '区切り時間の保存に失敗しました');
     }
+  };
+
+  const handleRemoveBreakpoint = (index: number) => {
+    setCustomBreakpoints((current) => current.filter((_, i) => i !== index));
   };
 
   const handleClearBreakpoints = async () => {
     try {
       await saveShiftBreakpoints(shiftId, []);
       setCustomBreakpoints([]);
-      setBreakpointInput('');
+      setNewBreakpointName('');
+      setNewBreakpointStart('');
+      setNewBreakpointEnd('');
       toast.success('区切り時間をクリアしました');
     } catch (error: any) {
       toast.error(error.message || '区切り時間のクリアに失敗しました');
@@ -541,7 +481,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const currentUserEmail = localStorage.getItem('user_email') || '';
   const userApplication = applications.find((app) => app.user_email === currentUserEmail);
   const isDeadlinePassed = new Date(shift.application_deadline) < new Date();
-  const parsedPreview = parseBreakpointSlots(breakpointInput, shift.start_time, shift.end_time);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -654,14 +593,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Tabs value={adminTab} onValueChange={setAdminTab}>
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="daily">日付別管理</TabsTrigger>
-                  <TabsTrigger value="wish">希望一覧</TabsTrigger>
-                  <TabsTrigger value="result">採用結果一覧</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="daily" className="space-y-4 mt-4">
               {shift.results_published && (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
@@ -673,124 +604,48 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                 </div>
               )}
 
-              {dailySchedules.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {dailySchedules.map((schedule) => {
-                    const count = (dateApplications[schedule.date] || []).length;
-                    return (
-                      <Button
-                        key={schedule.date}
-                        size="sm"
-                        variant={selectedDate === schedule.date ? 'default' : 'outline'}
-                        onClick={() => setSelectedDate(schedule.date)}
-                      >
-                        {formatDate(schedule.date)}
-                        {count > 0 ? ` (${count})` : ''}
-                      </Button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {selectedDate && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <h3 className="font-medium">{formatDate(selectedDate)} の応募者</h3>
-                    {!shift.results_published && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleApproveSelectedForDate(selectedDate)}
-                        disabled={processingDate === selectedDate || selectedDayApplications.filter((item) => item.selected && item.status === 'pending').length === 0}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        {processingDate === selectedDate ? '承認中...' : '選択を承認'}
-                      </Button>
-                    )}
-                  </div>
-
-                  {selectedDayApplications.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                      <p>この日の応募者はいません</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {selectedDayApplications.map((app) => (
-                        <div key={`${app.id}-${selectedDate}`} className={`border rounded-lg p-4 ${app.status === 'approved' ? 'bg-green-50 border-green-200' : app.selected ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}>
-                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div className="flex items-start gap-3 flex-1">
-                              {!shift.results_published && app.status === 'pending' && (
-                                <Checkbox checked={app.selected} onCheckedChange={(checked) => handleSelectApplication(selectedDate, app.id, checked as boolean)} className="mt-1" />
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <div className="font-medium">{app.user_name}</div>
-                                <div className="text-xs text-gray-500 truncate">{app.user_email}</div>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 md:w-[280px]">
-                              <Input type="time" value={app.start_time} disabled={shift.results_published || app.status !== 'pending'} onChange={(e) => handleChangeApplicationTime(selectedDate, app.id, 'start_time', e.target.value)} />
-                              <Input type="time" value={app.end_time} disabled={shift.results_published || app.status !== 'pending'} onChange={(e) => handleChangeApplicationTime(selectedDate, app.id, 'end_time', e.target.value)} />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-                </TabsContent>
-
-                <TabsContent value="wish" className="space-y-4 mt-4">
-                  <ShiftCalendarView
-                    dailySchedules={dailySchedules}
-                    dateApplications={dateApplications}
-                    onDateClick={setSelectedDate}
-                    selectedDate={selectedDate}
-                  />
-                  <ShiftGridView
-                    mode="wish"
-                    dailySchedules={gridDailySchedules}
-                    dateApplications={dateApplications}
-                    groupMembers={groupMembers}
-                    customBreakpoints={customBreakpoints}
-                    shiftStartTime={shift.start_time}
-                    shiftEndTime={shift.end_time}
-                    roles={roles}
-                    approvedSlotsMap={approvedSlotsMap}
-                    wishTimesMap={wishTimesMap}
-                    isAdmin={false}
-                  />
-                  <DesiredShiftsTracker
-                    applications={applications as any}
-                    dateApplications={dateApplications as any}
-                    dailySchedules={dailySchedules as any}
-                  />
-                </TabsContent>
-
-                <TabsContent value="result" className="space-y-4 mt-4">
                   <div className="border rounded-lg p-3 sm:p-4 bg-gray-50 space-y-3">
                     <div>
                       <h4 className="text-sm font-medium text-gray-800">時間帯の区切り設定</h4>
-                      <p className="text-xs text-gray-600 mt-1">シフト全体の中で区切りたい時刻を入力すると、採用結果一覧がその時間帯単位で採用できる表になります。</p>
+                      <p className="text-xs text-gray-600 mt-1">区切りごとに名前と時間を登録します。例: A 10:00〜11:20</p>
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                       <Input
-                        value={breakpointInput}
-                        onChange={(e) => setBreakpointInput(e.target.value)}
-                        placeholder="例: 12:00, 15:00"
+                        value={newBreakpointName}
+                        onChange={(e) => setNewBreakpointName(e.target.value)}
+                        placeholder="名前 (例: A)"
                       />
-                      <Button onClick={handleApplyBreakpoints} className="sm:w-auto">区切りを適用</Button>
-                      <Button variant="outline" onClick={handleClearBreakpoints} className="sm:w-auto">区切りをクリア</Button>
+                      <Input
+                        type="time"
+                        value={newBreakpointStart}
+                        onChange={(e) => setNewBreakpointStart(e.target.value)}
+                      />
+                      <Input
+                        type="time"
+                        value={newBreakpointEnd}
+                        onChange={(e) => setNewBreakpointEnd(e.target.value)}
+                      />
+                      <Button onClick={handleAddBreakpoint}>追加</Button>
                     </div>
-                    {parsedPreview.error ? (
-                      <p className="text-xs text-red-600">{parsedPreview.error}</p>
-                    ) : (
-                      <p className="text-xs text-gray-600">
-                        プレビュー: {parsedPreview.slots.length > 0
-                          ? parsedPreview.slots.map((slot) => `${slot.start}〜${slot.end}`).join(' / ')
-                          : `${shift.start_time.slice(0, 5)}〜${shift.end_time.slice(0, 5)}（区切りなし）`}
-                      </p>
-                    )}
+                    <div className="space-y-2">
+                      {customBreakpoints.length === 0 ? (
+                        <p className="text-xs text-gray-600">現在は区切りなし（全体: {shift.start_time.slice(0, 5)}〜{shift.end_time.slice(0, 5)}）</p>
+                      ) : (
+                        <div className="space-y-1">
+                          {customBreakpoints.map((slot, index) => (
+                            <div key={`${slot.name}-${slot.start}-${slot.end}-${index}`} className="flex items-center justify-between gap-2 text-xs bg-white border rounded px-2 py-1.5">
+                              <span>{slot.name} {slot.start}〜{slot.end}</span>
+                              <Button type="button" size="sm" variant="outline" onClick={() => handleRemoveBreakpoint(index)}>削除</Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button onClick={handleSaveBreakpoints}>区切りを保存</Button>
+                      <Button variant="outline" onClick={handleClearBreakpoints}>区切りをクリア</Button>
+                    </div>
                   </div>
                   <ShiftGridView
                     mode="result"
@@ -807,8 +662,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                     onApproveSlot={handleApproveSlot}
                     onUnapproveSlot={handleUnapproveSlot}
                   />
-                </TabsContent>
-              </Tabs>
+                </div>
             </CardContent>
           </Card>
         )}
