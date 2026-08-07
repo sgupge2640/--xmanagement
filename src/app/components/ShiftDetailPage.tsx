@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { ArrowLeft, Calendar, Clock, MapPin, CheckCircle2, XCircle, AlertCircle, Megaphone } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, MapPin, CheckCircle2, XCircle, AlertCircle, Megaphone, Plus, Trash2 } from 'lucide-react';
 import {
   getShiftDetail,
   applyToShift,
@@ -13,6 +13,7 @@ import {
   saveApprovedSlotsMap,
   saveShiftBreakpoints,
   getShiftRoles,
+  saveShiftRoles,
   unapproveShiftApplication,
   type ApprovedSlot,
   type ApprovedSlotsMap,
@@ -141,10 +142,18 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const [groupMembers, setGroupMembers] = useState<Array<{ user_email: string; user_name: string }>>([]);
   const [approvedSlotsMap, setApprovedSlotsMap] = useState<ApprovedSlotsMap>({});
   const [roles, setRoles] = useState<ShiftRole[]>([]);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleColor, setNewRoleColor] = useState('#3b82f6');
+  const [savingRoles, setSavingRoles] = useState(false);
   const [customBreakpoints, setCustomBreakpoints] = useState<CustomBreakpoint[]>([]);
   const [newBreakpointName, setNewBreakpointName] = useState('');
   const [newBreakpointStart, setNewBreakpointStart] = useState('');
   const [newBreakpointEnd, setNewBreakpointEnd] = useState('');
+
+  const PRESET_COLORS = [
+    '#ef4444', '#f97316', '#eab308', '#22c55e',
+    '#3b82f6', '#a855f7', '#ec4899', '#78716c',
+  ];
 
   const overlaps = (startA: string, endA: string, startB: string, endB: string) => {
     const toMinutes = (t: string) => {
@@ -181,7 +190,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
         data.applications.forEach((application) => {
           if (application.daily_schedule && application.daily_schedule.length > 0) {
-            application.daily_schedule.forEach((day) => {
+            application.daily_schedule.forEach((day: DaySchedule) => {
               if (!grouped[day.date]) grouped[day.date] = [];
               grouped[day.date].push({
                 id: application.id,
@@ -463,6 +472,32 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     setCustomBreakpoints((current) => current.filter((_, i) => i !== index));
   };
 
+  const handleAddRole = () => {
+    const name = newRoleName.trim();
+    if (!name) {
+      toast.error('役割名を入力してください');
+      return;
+    }
+    setRoles((current) => [...current, { id: crypto.randomUUID(), name, color: newRoleColor }]);
+    setNewRoleName('');
+  };
+
+  const handleRemoveRole = (id: string) => {
+    setRoles((current) => current.filter((role) => role.id !== id));
+  };
+
+  const handleSaveRoles = async () => {
+    try {
+      setSavingRoles(true);
+      await saveShiftRoles(shiftId, roles);
+      toast.success('採用内容を保存しました');
+    } catch (error: any) {
+      toast.error(error.message || '採用内容の保存に失敗しました');
+    } finally {
+      setSavingRoles(false);
+    }
+  };
+
   const handleClearBreakpoints = async () => {
     try {
       await saveShiftBreakpoints(shiftId, []);
@@ -630,6 +665,77 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
               )}
 
                 <div className="space-y-4">
+                  <div className="border rounded-lg p-3 sm:p-4 bg-gray-50 space-y-3">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-800">採用内容の編集</h4>
+                      <p className="text-xs text-gray-600 mt-1">募集後でも役割の追加・削除・色変更ができます。</p>
+                    </div>
+
+                    {roles.length > 0 && (
+                      <div className="space-y-2">
+                        {roles.map((role) => (
+                          <div key={role.id} className="grid grid-cols-[auto_1fr_auto] gap-2 items-center bg-white border rounded px-2 py-2">
+                            <input
+                              value={role.name}
+                              onChange={(e) => setRoles((current) => current.map((item) => item.id === role.id ? { ...item, name: e.target.value } : item))}
+                              className="w-full border rounded px-2 py-1 text-sm"
+                              placeholder="役割名"
+                            />
+                            <div className="flex gap-1 flex-wrap justify-start">
+                              {PRESET_COLORS.map((color) => (
+                                <button
+                                  key={color}
+                                  type="button"
+                                  className={`w-5 h-5 rounded-full border-2 ${role.color === color ? 'border-gray-800' : 'border-transparent'}`}
+                                  style={{ backgroundColor: color }}
+                                  onClick={() => setRoles((current) => current.map((item) => item.id === role.id ? { ...item, color } : item))}
+                                />
+                              ))}
+                            </div>
+                            <Button type="button" size="sm" variant="outline" onClick={() => handleRemoveRole(role.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
+                      <Input
+                        value={newRoleName}
+                        onChange={(e) => setNewRoleName(e.target.value)}
+                        placeholder="役割名（例：リーダー、レジ担当）"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddRole();
+                          }
+                        }}
+                      />
+                      <div className="flex gap-1 flex-wrap items-center">
+                        {PRESET_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            className={`w-5 h-5 rounded-full border-2 ${newRoleColor === color ? 'border-gray-800' : 'border-transparent'}`}
+                            style={{ backgroundColor: color }}
+                            onClick={() => setNewRoleColor(color)}
+                          />
+                        ))}
+                      </div>
+                      <Button type="button" variant="outline" onClick={handleAddRole} disabled={!newRoleName.trim()}>
+                        <Plus className="h-4 w-4 mr-1" />
+                        追加
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button onClick={handleSaveRoles} disabled={savingRoles}>
+                        {savingRoles ? '保存中...' : '採用内容を保存'}
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="border rounded-lg p-3 sm:p-4 bg-gray-50 space-y-3">
                     <div>
                       <h4 className="text-sm font-medium text-gray-800">時間帯の区切り設定</h4>
