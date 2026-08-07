@@ -139,10 +139,14 @@ export function ShiftGridView({
         const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
         return overlaps(wt.start, wt.end, slot.start, slot.end);
       }).length;
-      resultCounts[key] = apps.filter(app =>
-        (app.day_status === 'approved' || app.day_status === 'direct_approved') &&
-        overlaps(app.start_time, app.end_time, slot.start, slot.end)
-      ).length;
+      resultCounts[key] = apps.filter(app => {
+        const kvSlots = approvedSlotsMap[app.user_email]?.[date];
+        if (kvSlots && kvSlots.length > 0) {
+          return kvSlots.some(ks => overlaps(ks.start, ks.end, slot.start, slot.end));
+        }
+        return (app.day_status === 'approved' || app.day_status === 'direct_approved') &&
+          overlaps(app.start_time, app.end_time, slot.start, slot.end);
+      }).length;
     });
   });
 
@@ -263,8 +267,8 @@ export function ShiftGridView({
                   text = '○';
                   if (
                     mode === 'result' &&
-                    (app.day_status === 'approved' || app.day_status === 'direct_approved') &&
-                    overlaps(app.start_time, app.end_time, slot.start, slot.end)
+                    ((approvedSlotsMap[app.user_email]?.[date]?.length > 0 && approvedSlotsMap[app.user_email][date].some(ks => overlaps(ks.start, ks.end, slot.start, slot.end))) ||
+                      ((app.day_status === 'approved' || app.day_status === 'direct_approved') && overlaps(app.start_time, app.end_time, slot.start, slot.end)))
                   ) {
                     bg = '#4ade80';
                     text = '●';
