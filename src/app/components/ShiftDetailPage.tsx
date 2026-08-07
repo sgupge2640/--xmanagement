@@ -27,14 +27,6 @@ import { Textarea } from './ui/textarea';
 import { AppliedShiftCalendar } from './AppliedShiftCalendar';
 import { ShiftApplicationCalendar } from './ShiftApplicationCalendar';
 import { ShiftGridView } from './ShiftGridView';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from './ui/dialog';
 
 interface DaySchedule {
   date: string;
@@ -136,8 +128,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const [showApplicationForm, setShowApplicationForm] = useState(false);
   const [dateApplications, setDateApplications] = useState<Record<string, ApplicationForDate[]>>({});
   const [publishingResults, setPublishingResults] = useState(false);
-  const [resultsMessage, setResultsMessage] = useState('');
-  const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [desiredShiftsPerWeek, setDesiredShiftsPerWeek] = useState(3);
   const [groupMembers, setGroupMembers] = useState<Array<{ user_email: string; user_name: string }>>([]);
   const [approvedSlotsMap, setApprovedSlotsMap] = useState<ApprovedSlotsMap>({});
@@ -319,9 +309,8 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const handlePublishResults = async () => {
     setPublishingResults(true);
     try {
-      await publishShiftResults(shiftId, resultsMessage);
-      toast.success('結果を公開しました');
-      setShowPublishDialog(false);
+      await publishShiftResults(shiftId);
+      toast.success('採用結果を公開しました');
       await loadDetail();
     } catch (error: any) {
       toast.error(error.message || '結果の公開に失敗しました');
@@ -645,9 +634,9 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                   <CardDescription>{applications.length}件の応募（承認済み: {approvedCount}件、承認待ち: {pendingCount}件）</CardDescription>
                 </div>
                 {!shift.results_published && applications.length > 0 && (
-                  <Button onClick={() => setShowPublishDialog(true)} disabled={publishingResults} variant="outline">
+                  <Button onClick={handlePublishResults} disabled={publishingResults} variant="outline">
                     <Megaphone className="h-4 w-4 mr-2" />
-                    結果を発表
+                    採用を公開
                   </Button>
                 )}
               </div>
@@ -657,10 +646,10 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <Megaphone className="h-5 w-5 text-blue-600" />
-                    <h3 className="font-medium text-blue-900">採用結果を発表しました</h3>
+                    <h3 className="font-medium text-blue-900">採用結果を公開しました</h3>
                   </div>
-                  <p className="text-sm text-blue-700 mb-1">発表日時: {formatDateTime(shift.results_published_at || '')}</p>
-                  {shift.results_message && <p className="text-sm text-blue-800 whitespace-pre-wrap">{shift.results_message}</p>}
+                  <p className="text-sm text-blue-700 mb-1">公開日時: {formatDateTime(shift.results_published_at || '')}</p>
+                  <p className="text-sm text-blue-800 whitespace-pre-wrap">採用された内容だけが利用者のカレンダーに反映されます。</p>
                 </div>
               )}
 
@@ -798,29 +787,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
           </Card>
         )}
 
-        <Dialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>採用結果を発表しますか？</DialogTitle>
-              <DialogDescription>結果を発表すると、承認待ちの応募は自動的に不採用となります。</DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <Label htmlFor="results-message" className="text-sm font-medium">メッセージ（任意）</Label>
-              <Textarea
-                id="results-message"
-                value={resultsMessage}
-                onChange={(e) => setResultsMessage(e.target.value)}
-                placeholder="採用者・不採用者に表示するメッセージを入力してください。"
-                className="mt-2"
-                rows={4}
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowPublishDialog(false)} disabled={publishingResults}>キャンセル</Button>
-              <Button onClick={handlePublishResults} disabled={publishingResults}>{publishingResults ? '公開中...' : '結果を発表'}</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );
