@@ -243,7 +243,8 @@ export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectG
               {onEditProfile && (
                 <Button variant="outline" onClick={onEditProfile} className="flex-1 sm:flex-none text-sm">
                   <Settings className="h-4 w-4 mr-2" />
-                  プロフィール編雁E                </Button>
+                  プロフィール編集
+                </Button>
               )}
               <Button variant="outline" onClick={onLogout} className="flex-1 sm:flex-none text-sm">
                 <LogOut className="h-4 w-4 mr-2" />
@@ -253,7 +254,7 @@ export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectG
           </div>
         </div>
 
-        {/* 参加中のグルーチE*/}
+        {/* 参加中のグループ */}
         {loading ? (
           <div className="text-center py-8">
             <p className="text-gray-500 text-sm sm:text-base">{t.myPage.loading}</p>
