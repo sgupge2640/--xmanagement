@@ -64,8 +64,8 @@ export function GroupDashboard({
       setLoading(true);
       setError(null);
       const data = await getShifts(groupId);
-      // APIレスポンスから配�Eを取征E      const shiftsArray = data.shifts || [];
-      // 新しい頁E��ソート！EDが大きいほど新しい�E�E      const sortedData = shiftsArray.sort((a: Shift, b: Shift) => b.id - a.id);
+      const shiftsArray = data.shifts || [];
+      const sortedData = shiftsArray.sort((a: Shift, b: Shift) => b.id - a.id);
       setShifts(sortedData);
     } catch (error: any) {
       console.error('シフト取得エラー:', error.message);
