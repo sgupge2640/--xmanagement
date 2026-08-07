@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from './ui/dialog';
 import { getApprovedSlotsMap } from '../lib/api';
+import type { ApprovedSlot } from '../lib/api';
 
 interface AppliedDay {
   date: string;
@@ -24,7 +25,7 @@ interface AppliedShiftCalendarProps {
   startDate?: string;
   endDate?: string;
   publishedDates?: string[] | null;
-  approvedSlotsMap?: { [email: string]: { [date: string]: { start: string; end: string }[] } };
+  approvedSlotsMap?: { [email: string]: { [date: string]: ApprovedSlot[] } };
   userEmail?: string;
   shiftId?: number;
 }
@@ -34,33 +35,51 @@ function toMinutes(time: string) {
   return hour * 60 + minute;
 }
 
-function getMergedSlotRanges(slots: { start: string; end: string }[]) {
+function getSlotOrder(slot: ApprovedSlot) {
+  if (!slot.slotKey) return null;
+  const match = slot.slotKey.match(/^idx:(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+function getMergedSlotRanges(slots: ApprovedSlot[]) {
   if (!slots || slots.length === 0) return [] as { start: string; end: string }[];
 
-  const sorted = [...slots].sort((a, b) => a.start.localeCompare(b.start));
-  const merged: { start: string; end: string }[] = [];
+  const sorted = [...slots].sort((a, b) => {
+    const orderA = getSlotOrder(a);
+    const orderB = getSlotOrder(b);
+    if (orderA !== null && orderB !== null) return orderA - orderB;
+    return a.start.localeCompare(b.start);
+  });
+  const merged: { start: string; end: string; lastOrder: number | null }[] = [];
 
   sorted.forEach((slot) => {
+    const slotOrder = getSlotOrder(slot);
     const last = merged[merged.length - 1];
     if (!last) {
-      merged.push({ start: slot.start, end: slot.end });
+      merged.push({ start: slot.start, end: slot.end, lastOrder: slotOrder });
       return;
     }
 
-    if (toMinutes(slot.start) <= toMinutes(last.end)) {
+    const isTimeContinuous = toMinutes(slot.start) <= toMinutes(last.end);
+    const isAdjacentSlot = slotOrder !== null && last.lastOrder !== null && slotOrder === last.lastOrder + 1;
+
+    if (isTimeContinuous || isAdjacentSlot) {
       if (toMinutes(slot.end) > toMinutes(last.end)) {
         last.end = slot.end;
+      }
+      if (slotOrder !== null) {
+        last.lastOrder = slotOrder;
       }
       return;
     }
 
-    merged.push({ start: slot.start, end: slot.end });
+    merged.push({ start: slot.start, end: slot.end, lastOrder: slotOrder });
   });
 
-  return merged;
+  return merged.map(({ start, end }) => ({ start, end }));
 }
 
-function formatSlotRanges(slots: { start: string; end: string }[]) {
+function formatSlotRanges(slots: ApprovedSlot[]) {
   const ranges = getMergedSlotRanges(slots);
   if (ranges.length === 0) return '';
   return ranges.map((range) => `${range.start}-${range.end}`).join(' / ');

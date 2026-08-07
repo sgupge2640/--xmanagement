@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Users, UserPlus, LogOut, UserCheck, Crown, User, Calendar as CalendarIcon, Trash2, Settings } from 'lucide-react';
 import { getEmail, getName } from '../lib/auth';
 import { getMyGroups, getMyShifts, getGroupCalendar, getApprovedSlotsMap, deleteGroup } from '../lib/api';
+import type { ApprovedSlot } from '../lib/api';
 import { toast } from 'sonner';
 import { Badge } from './ui/badge';
 import { Calendar } from './Calendar';
@@ -45,30 +46,48 @@ function toMinutes(time: string) {
   return hour * 60 + minute;
 }
 
-function getMergedSlotRanges(slots: { start: string; end: string }[]) {
+function getSlotOrder(slot: ApprovedSlot) {
+  if (!slot.slotKey) return null;
+  const match = slot.slotKey.match(/^idx:(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+function getMergedSlotRanges(slots: ApprovedSlot[]) {
   if (!slots || slots.length === 0) return [] as { start: string; end: string }[];
 
-  const sorted = [...slots].sort((a, b) => a.start.localeCompare(b.start));
-  const merged: { start: string; end: string }[] = [];
+  const sorted = [...slots].sort((a, b) => {
+    const orderA = getSlotOrder(a);
+    const orderB = getSlotOrder(b);
+    if (orderA !== null && orderB !== null) return orderA - orderB;
+    return a.start.localeCompare(b.start);
+  });
+  const merged: { start: string; end: string; lastOrder: number | null }[] = [];
 
   sorted.forEach((slot) => {
+    const slotOrder = getSlotOrder(slot);
     const last = merged[merged.length - 1];
     if (!last) {
-      merged.push({ start: slot.start, end: slot.end });
+      merged.push({ start: slot.start, end: slot.end, lastOrder: slotOrder });
       return;
     }
 
-    if (toMinutes(slot.start) <= toMinutes(last.end)) {
+    const isTimeContinuous = toMinutes(slot.start) <= toMinutes(last.end);
+    const isAdjacentSlot = slotOrder !== null && last.lastOrder !== null && slotOrder === last.lastOrder + 1;
+
+    if (isTimeContinuous || isAdjacentSlot) {
       if (toMinutes(slot.end) > toMinutes(last.end)) {
         last.end = slot.end;
+      }
+      if (slotOrder !== null) {
+        last.lastOrder = slotOrder;
       }
       return;
     }
 
-    merged.push({ start: slot.start, end: slot.end });
+    merged.push({ start: slot.start, end: slot.end, lastOrder: slotOrder });
   });
 
-  return merged;
+  return merged.map(({ start, end }) => ({ start, end }));
 }
 
 export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectGroup, onLogout, onEditProfile }: MyPageProps) {

@@ -1561,9 +1561,9 @@ export async function saveHiddenDayApps(shiftId: number, hidden: { appId: number
 }
 
 // ========== Approved Slots Map (グリッドからの採用スロット管理) ==========
-// 構造: { [email]: { [date]: {start: string, end: string, roleId?: string}[] } }
+// 構造: { [email]: { [date]: {start: string, end: string, roleId?: string, slotKey?: string}[] } }
 
-export type ApprovedSlot = { start: string; end: string; roleId?: string };
+export type ApprovedSlot = { start: string; end: string; roleId?: string; slotKey?: string };
 export type ApprovedSlotsMap = { [email: string]: { [date: string]: ApprovedSlot[] } };
 
 export async function getApprovedSlotsMap(shiftId: number): Promise<ApprovedSlotsMap> {

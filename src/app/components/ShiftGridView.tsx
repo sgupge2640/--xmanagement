@@ -77,6 +77,7 @@ export function ShiftGridView({
   const [rolePopover, setRolePopover] = useState<{
     appId: number; date: string; memberName: string;
     slotStart: string; slotEnd: string;
+    slotKey?: string;
     currentRoleId?: string;
     x: number; y: number;
   } | null>(null);
@@ -359,12 +360,13 @@ export function ShiftGridView({
     appId: number, date: string,
     slotStart: string, slotEnd: string,
     existKvSlots: ApprovedSlot[],
+    slotKey?: string,
     roleId?: string
   ) => {
     if (!onApproveSlot) return;
     setApproving(true);
     try {
-      const newSlot: ApprovedSlot = { start: slotStart, end: slotEnd, ...(roleId ? { roleId } : {}) };
+      const newSlot: ApprovedSlot = { start: slotStart, end: slotEnd, ...(roleId ? { roleId } : {}), ...(slotKey ? { slotKey } : {}) };
       let finalSlots: ApprovedSlot[];
       // 既存スロットと重複するものがあれば置き換え、なければ追加（マージしない）
       const overlapIdx = existKvSlots.findIndex(ks => overlaps(ks.start, ks.end, slotStart, slotEnd));
@@ -394,7 +396,7 @@ export function ShiftGridView({
   // ポップオーバーでロール変更（採用済みセルのロールだけ更新）
   const handleChangeRole = async (roleId: string | undefined) => {
     if (!rolePopover || !onApproveSlot) return;
-    const { appId, date, slotStart, slotEnd } = rolePopover;
+    const { appId, date, slotStart, slotEnd, slotKey } = rolePopover;
     // appIdからemailを特定
     const memberEmail = Object.values(dateApplications).flat().find(a => a.id === appId)?.user_email
       ?? Object.keys(approvedSlotsMap).find(e => approvedSlotsMap[e]?.[date]) ?? '';
@@ -402,7 +404,7 @@ export function ShiftGridView({
     // 該当スロットのroleIdだけ更新
     const updated: ApprovedSlot[] = existKvSlots.length > 0
       ? existKvSlots.map(s => overlaps(s.start, s.end, slotStart, slotEnd) ? { ...s, roleId } : s)
-      : [{ start: slotStart, end: slotEnd, roleId }];
+      : [{ start: slotStart, end: slotEnd, roleId, ...(slotKey ? { slotKey } : {}) }];
     setApproving(true);
     try {
       await onApproveSlot(appId, date, updated[0].start, updated[updated.length - 1].end, updated);
@@ -560,6 +562,7 @@ export function ShiftGridView({
                       setRolePopover({
                         appId: app.id, date, memberName: app.user_name,
                         slotStart: slot.start, slotEnd: slot.end,
+                        slotKey: matchingKvSlot?.slotKey ?? `idx:${slotIndex}`,
                         currentRoleId: matchingKvSlot?.roleId,
                         x: e.clientX, y: e.clientY,
                       });
@@ -567,7 +570,7 @@ export function ShiftGridView({
                     }
                     // 希望あり → 即時採用
                     const existKvSlots = kvSlots ?? [];
-                    handleInstantApprove(app.id, date, slot.start, slot.end, existKvSlots);
+                    handleInstantApprove(app.id, date, slot.start, slot.end, existKvSlots, `idx:${slotIndex}`);
                   };
 
                   return (
