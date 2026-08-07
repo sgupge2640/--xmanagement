@@ -40,6 +40,37 @@ interface MyPageProps {
   onEditProfile?: () => void;
 }
 
+function toMinutes(time: string) {
+  const [hour, minute] = time.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
+function getMergedSlotRanges(slots: { start: string; end: string }[]) {
+  if (!slots || slots.length === 0) return [] as { start: string; end: string }[];
+
+  const sorted = [...slots].sort((a, b) => a.start.localeCompare(b.start));
+  const merged: { start: string; end: string }[] = [];
+
+  sorted.forEach((slot) => {
+    const last = merged[merged.length - 1];
+    if (!last) {
+      merged.push({ start: slot.start, end: slot.end });
+      return;
+    }
+
+    if (toMinutes(slot.start) <= toMinutes(last.end)) {
+      if (toMinutes(slot.end) > toMinutes(last.end)) {
+        last.end = slot.end;
+      }
+      return;
+    }
+
+    merged.push({ start: slot.start, end: slot.end });
+  });
+
+  return merged;
+}
+
 export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectGroup, onLogout, onEditProfile }: MyPageProps) {
   const { t } = useLanguage();
   const userName = getName() || 'ユーザー';
@@ -119,9 +150,9 @@ export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectG
           .filter((day: any) => day.status === 'approved' || day.status === 'direct_approved')
           .filter((day: any) => (ownSlotsByDate[day.date]?.length || 0) > 0)
           .map((day: any) => {
-            const slotRange = ownSlotsByDate[day.date].slice().sort((a: any, b: any) => a.start.localeCompare(b.start));
-            const startTime = slotRange[0].start;
-            const endTime = slotRange[slotRange.length - 1].end;
+            const mergedRanges = getMergedSlotRanges(ownSlotsByDate[day.date]);
+            const startTime = mergedRanges[0].start;
+            const endTime = mergedRanges[mergedRanges.length - 1].end;
 
             return {
               date: day.date,

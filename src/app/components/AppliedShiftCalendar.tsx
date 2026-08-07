@@ -29,13 +29,41 @@ interface AppliedShiftCalendarProps {
   shiftId?: number;
 }
 
-function getSlotRange(slots: { start: string; end: string }[]) {
-  if (!slots || slots.length === 0) return null;
+function toMinutes(time: string) {
+  const [hour, minute] = time.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
+function getMergedSlotRanges(slots: { start: string; end: string }[]) {
+  if (!slots || slots.length === 0) return [] as { start: string; end: string }[];
+
   const sorted = [...slots].sort((a, b) => a.start.localeCompare(b.start));
-  return {
-    start: sorted[0].start,
-    end: sorted[sorted.length - 1].end,
-  };
+  const merged: { start: string; end: string }[] = [];
+
+  sorted.forEach((slot) => {
+    const last = merged[merged.length - 1];
+    if (!last) {
+      merged.push({ start: slot.start, end: slot.end });
+      return;
+    }
+
+    if (toMinutes(slot.start) <= toMinutes(last.end)) {
+      if (toMinutes(slot.end) > toMinutes(last.end)) {
+        last.end = slot.end;
+      }
+      return;
+    }
+
+    merged.push({ start: slot.start, end: slot.end });
+  });
+
+  return merged;
+}
+
+function formatSlotRanges(slots: { start: string; end: string }[]) {
+  const ranges = getMergedSlotRanges(slots);
+  if (ranges.length === 0) return '';
+  return ranges.map((range) => `${range.start}-${range.end}`).join(' / ');
 }
 
 export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishedDates = [], approvedSlotsMap: initialSlotsMap, userEmail, shiftId }: AppliedShiftCalendarProps) {
@@ -254,9 +282,8 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
                   {isApplied && appliedDay && (() => {
                     const kvSlots = userEmail && approvedSlotsMap?.[userEmail]?.[dateStr];
                     // 公開後はKV採用スロットだけを採用結果として表示
-                    const slotRange = kvSlots && kvSlots.length > 0 ? getSlotRange(kvSlots) : null;
-                    const timeText = slotRange
-                      ? `${slotRange.start}-${slotRange.end}`
+                    const timeText = kvSlots && kvSlots.length > 0
+                      ? formatSlotRanges(kvSlots)
                       : (isResultsPublished ? '' : `${appliedDay.start_time.slice(0, 5)}-${appliedDay.end_time.slice(0, 5)}`);
                     return (
                       <div className={`absolute bottom-0 left-0 right-0 text-[8px] ${barClass} bg-opacity-80 rounded-b px-0.5 truncate`}>
@@ -339,13 +366,13 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
                   {(() => {
                     const kvSlots = userEmail && approvedSlotsMap?.[userEmail]?.[selectedDate!];
                     if (kvSlots && kvSlots.length > 0) {
-                      const slotRange = getSlotRange(kvSlots);
-                      if (!slotRange) return null;
+                      const timeText = formatSlotRanges(kvSlots);
+                      if (!timeText) return null;
                       return (
                         <div className={`text-lg font-semibold ${
                           selectedDay.status === 'approved' ? 'text-green-900' : 'text-blue-900'
                         }`}>
-                          {slotRange.start} - {slotRange.end}
+                          {timeText}
                         </div>
                       );
                     }
