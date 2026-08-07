@@ -14,6 +14,7 @@ import {
   saveShiftBreakpoints,
   getShiftRoles,
   saveShiftRoles,
+  unpublishShiftResults,
   unapproveShiftApplication,
   type ApprovedSlot,
   type ApprovedSlotsMap,
@@ -314,6 +315,19 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       await loadDetail();
     } catch (error: any) {
       toast.error(error.message || '結果の公開に失敗しました');
+    } finally {
+      setPublishingResults(false);
+    }
+  };
+
+  const handleUnpublishResults = async () => {
+    setPublishingResults(true);
+    try {
+      await unpublishShiftResults(shiftId);
+      toast.success('採用結果の公開を取り消しました');
+      await loadDetail();
+    } catch (error: any) {
+      toast.error(error.message || '結果の公開取り消しに失敗しました');
     } finally {
       setPublishingResults(false);
     }
@@ -637,6 +651,12 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                   <Button onClick={handlePublishResults} disabled={publishingResults} variant="outline">
                     <Megaphone className="h-4 w-4 mr-2" />
                     採用を公開
+                  </Button>
+                )}
+                {shift.results_published && (
+                  <Button onClick={handleUnpublishResults} disabled={publishingResults} variant="outline">
+                    <Megaphone className="h-4 w-4 mr-2" />
+                    公開を取り消す
                   </Button>
                 )}
               </div>
