@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -70,9 +70,15 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
 
   const approvedSlotsMap = localSlotsMap;
   const isResultsPublished = publishedDates === null;
-  const visibleAppliedDays = isResultsPublished
-    ? appliedDays.filter((day) => day.status === 'approved' || day.status === 'direct_approved')
-    : appliedDays;
+  const visibleAppliedDays = useMemo(() => {
+    if (!isResultsPublished) return appliedDays;
+    return appliedDays.filter((day) => {
+      if (day.status !== 'approved' && day.status !== 'direct_approved') return false;
+      if (!userEmail) return false;
+      const slots = approvedSlotsMap?.[userEmail]?.[day.date] || [];
+      return slots.length > 0;
+    });
+  }, [isResultsPublished, appliedDays, userEmail, approvedSlotsMap]);
   const [currentMonth, setCurrentMonth] = useState(() => {
     if (visibleAppliedDays.length > 0) {
       const firstDate = visibleAppliedDays[0].date;
@@ -247,11 +253,11 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
                   </div>
                   {isApplied && appliedDay && (() => {
                     const kvSlots = userEmail && approvedSlotsMap?.[userEmail]?.[dateStr];
-                    // 採用通知は「最初の採用開始〜最後の採用終了」で表示
+                    // 公開後はKV採用スロットだけを採用結果として表示
                     const slotRange = kvSlots && kvSlots.length > 0 ? getSlotRange(kvSlots) : null;
                     const timeText = slotRange
                       ? `${slotRange.start}-${slotRange.end}`
-                      : `${appliedDay.start_time.slice(0, 5)}-${appliedDay.end_time.slice(0, 5)}`;
+                      : (isResultsPublished ? '' : `${appliedDay.start_time.slice(0, 5)}-${appliedDay.end_time.slice(0, 5)}`);
                     return (
                       <div className={`absolute bottom-0 left-0 right-0 text-[8px] ${barClass} bg-opacity-80 rounded-b px-0.5 truncate`}>
                         {timeText}
@@ -329,7 +335,7 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
                   <div className={`text-sm mb-1 ${
                     selectedDay.status === 'approved' ? 'text-green-700' : 'text-blue-700'
                   }`}>勤務時間</div>
-                  {/* KVスロットがあれば優先表示（採用済み時間）、なければDB値（希望時間）を表示 */}
+                  {/* 公開後はKV採用スロットの時間のみ表示 */}
                   {(() => {
                     const kvSlots = userEmail && approvedSlotsMap?.[userEmail]?.[selectedDate!];
                     if (kvSlots && kvSlots.length > 0) {
@@ -340,6 +346,15 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
                           selectedDay.status === 'approved' ? 'text-green-900' : 'text-blue-900'
                         }`}>
                           {slotRange.start} - {slotRange.end}
+                        </div>
+                      );
+                    }
+                    if (isResultsPublished) {
+                      return (
+                        <div className={`text-sm ${
+                          selectedDay.status === 'approved' ? 'text-green-700' : 'text-blue-700'
+                        }`}>
+                          採用時間は未設定です
                         </div>
                       );
                     }

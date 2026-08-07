@@ -117,13 +117,11 @@ export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectG
 
         return dailySchedules
           .filter((day: any) => day.status === 'approved' || day.status === 'direct_approved')
+          .filter((day: any) => (ownSlotsByDate[day.date]?.length || 0) > 0)
           .map((day: any) => {
-            const slotRange = ownSlotsByDate[day.date]?.length > 0
-              ? ownSlotsByDate[day.date].slice().sort((a: any, b: any) => a.start.localeCompare(b.start))
-              : null;
-
-            const startTime = slotRange ? slotRange[0].start : day.start_time;
-            const endTime = slotRange ? slotRange[slotRange.length - 1].end : day.end_time;
+            const slotRange = ownSlotsByDate[day.date].slice().sort((a: any, b: any) => a.start.localeCompare(b.start));
+            const startTime = slotRange[0].start;
+            const endTime = slotRange[slotRange.length - 1].end;
 
             return {
               date: day.date,
