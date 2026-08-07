@@ -340,6 +340,21 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     return map;
   }, [dateApplications]);
 
+  const updateApplicationDayStatus = (appId: number, date: string, isApproved: boolean) => {
+    setDateApplications((current) => ({
+      ...current,
+      [date]: (current[date] || []).map((item) =>
+        item.id === appId
+          ? {
+              ...item,
+              day_status: isApproved ? 'approved' : 'pending',
+              status: isApproved ? 'approved' : 'pending',
+            }
+          : item,
+      ),
+    }));
+  };
+
   const handleApproveSlot = async (
     appId: number,
     date: string,
@@ -347,44 +362,54 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     endTime: string,
     slots?: ApprovedSlot[],
   ) => {
-    await approveShiftApplication(appId, [{ date, start_time: startTime, end_time: endTime }]);
-
     const app = (dateApplications[date] || []).find((item) => item.id === appId);
-    if (app) {
-      const nextMap: ApprovedSlotsMap = { ...approvedSlotsMap };
-      nextMap[app.user_email] = { ...(nextMap[app.user_email] || {}) };
-      nextMap[app.user_email][date] = slots || [{ start: startTime, end: endTime }];
-      await saveApprovedSlotsMap(shiftId, nextMap);
-      setApprovedSlotsMap(nextMap);
-    }
+    if (!app) return;
 
-    await loadDetail();
+    const nextMap: ApprovedSlotsMap = { ...approvedSlotsMap };
+    nextMap[app.user_email] = { ...(nextMap[app.user_email] || {}) };
+    nextMap[app.user_email][date] = slots || [{ start: startTime, end: endTime }];
+
+    await approveShiftApplication(appId, [{ date }]);
+    await saveApprovedSlotsMap(shiftId, nextMap);
+    setApprovedSlotsMap(nextMap);
+    updateApplicationDayStatus(appId, date, true);
   };
 
   const handleUnapproveSlot = async (appId: number, date: string, slotStart?: string, slotEnd?: string) => {
-    await unapproveShiftApplication(appId, [date]);
-
     const app = (dateApplications[date] || []).find((item) => item.id === appId);
-    if (app) {
-      const nextMap: ApprovedSlotsMap = { ...approvedSlotsMap };
-      const userDateSlots = [...(nextMap[app.user_email]?.[date] || [])];
-      if (slotStart && slotEnd) {
-        const filtered = userDateSlots.filter((slot) => !overlaps(slot.start, slot.end, slotStart, slotEnd));
-        if (filtered.length > 0) {
-          nextMap[app.user_email] = { ...(nextMap[app.user_email] || {}), [date]: filtered };
-        } else if (nextMap[app.user_email]) {
-          const { [date]: _removed, ...restDates } = nextMap[app.user_email];
-          nextMap[app.user_email] = restDates;
-        }
-      } else if (nextMap[app.user_email]) {
-        const { [date]: _removed, ...restDates } = nextMap[app.user_email];
-        nextMap[app.user_email] = restDates;
-      }
-      await saveApprovedSlotsMap(shiftId, nextMap);
-      setApprovedSlotsMap(nextMap);
+    if (!app) return;
+
+    const nextMap: ApprovedSlotsMap = { ...approvedSlotsMap };
+    const userDateSlots = [...(nextMap[app.user_email]?.[date] || [])];
+    let remainingSlots = userDateSlots;
+
+    if (slotStart && slotEnd) {
+      remainingSlots = userDateSlots.filter((slot) => !overlaps(slot.start, slot.end, slotStart, slotEnd));
+    } else {
+      remainingSlots = [];
     }
 
-    await loadDetail();
+    if (remainingSlots.length > 0) {
+      nextMap[app.user_email] = { ...(nextMap[app.user_email] || {}), [date]: remainingSlots };
+      await saveApprovedSlotsMap(shiftId, nextMap);
+      setApprovedSlotsMap(nextMap);
+      await approveShiftApplication(appId, [{ date }]);
+      updateApplicationDayStatus(appId, date, true);
+      return;
+    }
+
+    if (nextMap[app.user_email]) {
+      const { [date]: _removed, ...restDates } = nextMap[app.user_email];
+      nextMap[app.user_email] = restDates;
+      if (Object.keys(nextMap[app.user_email]).length === 0) {
+        delete nextMap[app.user_email];
+      }
+    }
+
+    await saveApprovedSlotsMap(shiftId, nextMap);
+    setApprovedSlotsMap(nextMap);
+    await unapproveShiftApplication(appId, [date]);
+    updateApplicationDayStatus(appId, date, false);
   };
 
   const handleAddBreakpoint = () => {

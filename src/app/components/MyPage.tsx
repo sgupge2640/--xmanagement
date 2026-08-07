@@ -3,7 +3,7 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Users, UserPlus, LogOut, UserCheck, Crown, User, Calendar as CalendarIcon, Trash2, Settings } from 'lucide-react';
 import { getEmail, getName } from '../lib/auth';
-import { getMyGroups, getMyShifts, getGroupCalendar, deleteGroup } from '../lib/api';
+import { getMyGroups, getMyShifts, getGroupCalendar, getApprovedSlotsMap, deleteGroup } from '../lib/api';
 import { toast } from 'sonner';
 import { Badge } from './ui/badge';
 import { Calendar } from './Calendar';
@@ -47,6 +47,7 @@ export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectG
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [myShifts, setMyShifts] = useState<any[]>([]);
+  const [memberCalendarEvents, setMemberCalendarEvents] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [selectedAdminGroupId, setSelectedAdminGroupId] = useState<number | null>(null);
   const [adminCalendarData, setAdminCalendarData] = useState<any[]>([]);
@@ -89,10 +90,60 @@ export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectG
       setCalendarLoading(true);
       const data = await getMyShifts();
       setMyShifts(data.applications || []);
+
+      const publishedApplications = (data.applications || []).filter((application: any) => application.shifts?.results_published);
+      const slotMaps = await Promise.all(
+        publishedApplications.map(async (application: any) => {
+          const shiftId = application.shifts?.id;
+          if (!shiftId) return { shiftId: null, slots: {} };
+          try {
+            const slots = await getApprovedSlotsMap(shiftId);
+            return { shiftId, slots };
+          } catch {
+            return { shiftId, slots: {} };
+          }
+        })
+      );
+
+      const approvedEvents = publishedApplications.flatMap((application: any) => {
+        const shift = application.shifts;
+        const dailySchedules = application.daily_schedules || [];
+        if (!shift) return [];
+
+        const slotsMap = slotMaps.find((item) => item.shiftId === shift.id)?.slots || {};
+        const ownSlotsByDate = slotsMap[userEmail] || {};
+        const group = groups.find(g => g.id === shift.group_id);
+        const groupName = group?.name || 'グループ';
+
+        return dailySchedules
+          .filter((day: any) => day.status === 'approved' || day.status === 'direct_approved')
+          .map((day: any) => {
+            const slotRange = ownSlotsByDate[day.date]?.length > 0
+              ? ownSlotsByDate[day.date].slice().sort((a: any, b: any) => a.start.localeCompare(b.start))
+              : null;
+
+            const startTime = slotRange ? slotRange[0].start : day.start_time;
+            const endTime = slotRange ? slotRange[slotRange.length - 1].end : day.end_time;
+
+            return {
+              date: day.date,
+              start_time: startTime,
+              end_time: endTime,
+              title: shift.title,
+              group_name: groupName,
+              status: day.status,
+              shift_id: shift.id,
+              group_id: shift.group_id,
+            };
+          });
+      });
+
+      setMemberCalendarEvents(approvedEvents);
     } catch (error: any) {
       console.error('シフト取得エラー:', error.message);
       // エラー時も UI が壊れないよう空配列に戻す
       setMyShifts([]);
+      setMemberCalendarEvents([]);
       if (error.message.includes('401') || error.message.includes('Unauthorized')) {
         toast.error('セッションが切れました。再度ログインしてください。');
       }
@@ -153,59 +204,6 @@ export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectG
       loadAdminCalendar(selectedAdminGroupId);
     }
   }, [selectedAdminGroupId]);
-
-  // メンバー用カレンダーイベント
-  const memberCalendarEvents = myShifts.flatMap((application: any) => {
-    // applicationsから取得したデータ構造に合わせる
-    const shift = application.shifts;
-    const dailySchedules = application.daily_schedules;
-    
-    if (!shift) return [];
-    
-    // group_id からグループ名を取得
-    const group = groups.find(g => g.id === shift.group_id);
-    const groupName = group?.name || 'グループ';
-    
-    if (dailySchedules && dailySchedules.length > 0) {
-      // 日付ごとのスケジュールがある場合、承認済みの日付のみ表示
-      return dailySchedules
-        .filter((day: any) => day.status === 'approved')
-        .map((day: any) => ({
-          date: day.date,
-          start_time: day.start_time,
-          end_time: day.end_time,
-          title: shift.title,
-          group_name: groupName,
-          status: 'approved',
-          shift_id: shift.id,
-          group_id: shift.group_id,
-        }));
-    } else {
-      // 従来の形式では全体ステータスで判定
-      if (application.status !== 'approved' && application.status !== 'partially_approved') {
-        return [];
-      }
-      
-      const events = [];
-      const start = new Date(shift.start_date);
-      const end = new Date(shift.end_date);
-      
-      for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-        events.push({
-          date: date.toISOString().split('T')[0],
-          start_time: shift.start_time,
-          end_time: shift.end_time,
-          title: shift.title,
-          group_name: groupName,
-          status: application.status,
-          shift_id: shift.id,
-          group_id: shift.group_id,
-        });
-      }
-      
-      return events;
-    }
-  });
 
   const adminGroups = groups.filter(g => g.is_admin);
 

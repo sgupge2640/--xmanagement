@@ -463,18 +463,18 @@ export function ShiftGridView({
                 return slots.map((slot, slotIndex) => {
                   let cellState: 'none' | 'wish' | 'approved' = 'none';
                   if (app) {
-                    const isApprovedStatus = app.day_status === 'approved' || app.day_status === 'direct_approved';
                     const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
                     const wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
                     if (wishOverlap) {
                       cellState = 'wish';
-                      if (isApprovedStatus) {
-                        // KVスロットがあればそちらで判定（分割採用に対応）
-                        if (kvSlots && kvSlots.length > 0) {
-                          if (kvSlots.some(ks => overlaps(ks.start, ks.end, slot.start, slot.end))) {
-                            cellState = 'approved';
-                          }
-                        } else if (overlaps(app.start_time, app.end_time, slot.start, slot.end)) {
+                      // 新しい採用方式: KVスロットを優先し、無い場合だけ従来DB時間をフォールバック
+                      if (kvSlots && kvSlots.length > 0) {
+                        if (kvSlots.some(ks => overlaps(ks.start, ks.end, slot.start, slot.end))) {
+                          cellState = 'approved';
+                        }
+                      } else {
+                        const isApprovedStatus = app.day_status === 'approved' || app.day_status === 'direct_approved';
+                        if (isApprovedStatus && overlaps(app.start_time, app.end_time, slot.start, slot.end)) {
                           cellState = 'approved';
                         }
                       }
@@ -525,7 +525,7 @@ export function ShiftGridView({
                       style={bgStyle}
                       title={
                         cellState === 'approved'
-                          ? `採用済み${cellRole ? `（${cellRole.name}）` : ''}: ${app!.start_time.slice(0,5)}〜${app!.end_time.slice(0,5)}${isClickable ? '（クリックで取り消し）' : ''}`
+                          ? `採用済み${cellRole ? `（${cellRole.name}）` : ''}: ${(matchingKvSlot?.start ?? app!.start_time).slice(0,5)}〜${(matchingKvSlot?.end ?? app!.end_time).slice(0,5)}${isClickable ? '（クリックで取り消し）' : ''}`
                           : cellState === 'wish'
                           ? `希望: ${(wishTimesMap[app!.user_email]?.[date]?.start ?? app!.original_start_time).slice(0,5)}〜${(wishTimesMap[app!.user_email]?.[date]?.end ?? app!.original_end_time).slice(0,5)}${isClickable ? '（クリックで採用）' : ''}`
                           : ''

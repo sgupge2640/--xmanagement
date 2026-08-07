@@ -69,9 +69,13 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
   }, [shiftId]);
 
   const approvedSlotsMap = localSlotsMap;
+  const isResultsPublished = publishedDates === null;
+  const visibleAppliedDays = isResultsPublished
+    ? appliedDays.filter((day) => day.status === 'approved' || day.status === 'direct_approved')
+    : appliedDays;
   const [currentMonth, setCurrentMonth] = useState(() => {
-    if (appliedDays.length > 0) {
-      const firstDate = appliedDays[0].date;
+    if (visibleAppliedDays.length > 0) {
+      const firstDate = visibleAppliedDays[0].date;
       return new Date(firstDate + 'T00:00:00');
     }
     return new Date();
@@ -81,7 +85,7 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
 
   // 日付文字列のマップを作成
   const appliedDaysMap = new Map<string, AppliedDay>();
-  appliedDays.forEach(day => {
+  visibleAppliedDays.forEach(day => {
     appliedDaysMap.set(day.date, day);
   });
 
@@ -151,8 +155,8 @@ export function AppliedShiftCalendar({ appliedDays, startDate, endDate, publishe
     <div className="space-y-4">
       {/* 選択状況 */}
       <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-200">
-        <span className="text-sm text-blue-700">応募した日数: </span>
-        <span className="text-lg font-bold text-blue-600">{appliedDays.length}</span>
+        <span className="text-sm text-blue-700">{isResultsPublished ? '採用された日数: ' : '応募した日数: '}</span>
+        <span className="text-lg font-bold text-blue-600">{visibleAppliedDays.length}</span>
         <span className="text-sm text-blue-700"> 日</span>
       </div>
 
