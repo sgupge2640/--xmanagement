@@ -2,7 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { ArrowLeft, Calendar, Clock, MapPin, Users, CheckCircle2, XCircle, AlertCircle, Megaphone } from 'lucide-react';
-import { getShiftDetail, applyToShift, approveShiftApplication, publishShiftResults } from '../lib/api';
+import {
+  getShiftDetail,
+  applyToShift,
+  approveShiftApplication,
+  publishShiftResults,
+  getGroupMembers,
+  getApprovedSlotsMap,
+  saveApprovedSlotsMap,
+  getShiftRoles,
+  unapproveShiftApplication,
+  type ApprovedSlot,
+  type ApprovedSlotsMap,
+  type ShiftRole,
+} from '../lib/api';
 import { toast } from 'sonner';
 import { Badge } from './ui/badge';
 import { Checkbox } from './ui/checkbox';
@@ -10,6 +23,10 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { AppliedShiftCalendar } from './AppliedShiftCalendar';
+import { ShiftApplicationCalendar } from './ShiftApplicationCalendar';
+import { ShiftCalendarView, DesiredShiftsTracker } from './ShiftCalendarView';
+import { ShiftGridView } from './ShiftGridView';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +46,7 @@ interface DaySchedule {
 interface ShiftDetailData {
   shift: {
     id: number;
+    group_id: number;
     title: string;
     description: string;
     start_date: string;
@@ -65,8 +83,13 @@ interface ApplicationForDate {
   user_name: string;
   user_email: string;
   status: string;
+  day_status: string;
+  overall_status: string;
   start_time: string;
   end_time: string;
+  original_start_time: string;
+  original_end_time: string;
+  desired_shifts_per_week?: number;
   selected: boolean;
 }
 
@@ -111,6 +134,19 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const [publishingResults, setPublishingResults] = useState(false);
   const [resultsMessage, setResultsMessage] = useState('');
   const [showPublishDialog, setShowPublishDialog] = useState(false);
+  const [desiredShiftsPerWeek, setDesiredShiftsPerWeek] = useState(3);
+  const [adminTab, setAdminTab] = useState('daily');
+  const [groupMembers, setGroupMembers] = useState<Array<{ user_email: string; user_name: string }>>([]);
+  const [approvedSlotsMap, setApprovedSlotsMap] = useState<ApprovedSlotsMap>({});
+  const [roles, setRoles] = useState<ShiftRole[]>([]);
+
+  const overlaps = (startA: string, endA: string, startB: string, endB: string) => {
+    const toMinutes = (t: string) => {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    };
+    return toMinutes(startA) < toMinutes(endB) && toMinutes(endA) > toMinutes(startB);
+  };
 
   const loadDetail = async () => {
     try {
@@ -142,8 +178,13 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                 user_name: application.user_name,
                 user_email: application.user_email,
                 status: day.status || application.status,
+                day_status: day.status || application.status,
+                overall_status: application.status,
                 start_time: day.start_time,
                 end_time: day.end_time,
+                original_start_time: day.start_time,
+                original_end_time: day.end_time,
+                desired_shifts_per_week: application.desired_shifts_per_week,
                 selected: false,
               });
             });
@@ -156,14 +197,33 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
               user_name: application.user_name,
               user_email: application.user_email,
               status: application.status,
+              day_status: application.status,
+              overall_status: application.status,
               start_time: data.shift.start_time,
               end_time: data.shift.end_time,
+              original_start_time: data.shift.start_time,
+              original_end_time: data.shift.end_time,
+              desired_shifts_per_week: application.desired_shifts_per_week,
               selected: false,
             });
           });
         });
 
         setDateApplications(grouped);
+
+        const targetGroupId = groupId ?? data.shift.group_id;
+        try {
+          const [membersData, slotsMap, shiftRoles] = await Promise.all([
+            getGroupMembers(targetGroupId),
+            getApprovedSlotsMap(shiftId),
+            getShiftRoles(shiftId),
+          ]);
+          setGroupMembers(membersData.members || []);
+          setApprovedSlotsMap(slotsMap || {});
+          setRoles(shiftRoles || []);
+        } catch {
+          setGroupMembers([]);
+        }
       }
     } catch (error: any) {
       toast.error(error.message || 'シフト情報の取得に失敗しました');
@@ -221,7 +281,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
     setApplying(true);
     try {
-      await applyToShift(shiftId, selectedSchedules);
+      await applyToShift(shiftId, selectedSchedules, desiredShiftsPerWeek);
       toast.success('シフトに応募しました');
       setShowApplicationForm(false);
       await loadDetail();
@@ -286,6 +346,71 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   };
 
   const selectedDayApplications = useMemo(() => dateApplications[selectedDate] || [], [dateApplications, selectedDate]);
+  const gridDailySchedules = useMemo(
+    () => dailySchedules.map((item) => ({ date: item.date, displayDate: formatDate(item.date) })),
+    [dailySchedules],
+  );
+
+  const wishTimesMap = useMemo(() => {
+    const map: { [email: string]: { [date: string]: { start: string; end: string } } } = {};
+    Object.entries(dateApplications).forEach(([date, apps]) => {
+      apps.forEach((app) => {
+        if (!map[app.user_email]) map[app.user_email] = {};
+        map[app.user_email][date] = {
+          start: app.original_start_time,
+          end: app.original_end_time,
+        };
+      });
+    });
+    return map;
+  }, [dateApplications]);
+
+  const handleApproveSlot = async (
+    appId: number,
+    date: string,
+    startTime: string,
+    endTime: string,
+    slots?: ApprovedSlot[],
+  ) => {
+    await approveShiftApplication(appId, [{ date, start_time: startTime, end_time: endTime }]);
+
+    const app = (dateApplications[date] || []).find((item) => item.id === appId);
+    if (app) {
+      const nextMap: ApprovedSlotsMap = { ...approvedSlotsMap };
+      nextMap[app.user_email] = { ...(nextMap[app.user_email] || {}) };
+      nextMap[app.user_email][date] = slots || [{ start: startTime, end: endTime }];
+      await saveApprovedSlotsMap(shiftId, nextMap);
+      setApprovedSlotsMap(nextMap);
+    }
+
+    await loadDetail();
+  };
+
+  const handleUnapproveSlot = async (appId: number, date: string, slotStart?: string, slotEnd?: string) => {
+    await unapproveShiftApplication(appId, [date]);
+
+    const app = (dateApplications[date] || []).find((item) => item.id === appId);
+    if (app) {
+      const nextMap: ApprovedSlotsMap = { ...approvedSlotsMap };
+      const userDateSlots = [...(nextMap[app.user_email]?.[date] || [])];
+      if (slotStart && slotEnd) {
+        const filtered = userDateSlots.filter((slot) => !overlaps(slot.start, slot.end, slotStart, slotEnd));
+        if (filtered.length > 0) {
+          nextMap[app.user_email] = { ...(nextMap[app.user_email] || {}), [date]: filtered };
+        } else if (nextMap[app.user_email]) {
+          const { [date]: _removed, ...restDates } = nextMap[app.user_email];
+          nextMap[app.user_email] = restDates;
+        }
+      } else if (nextMap[app.user_email]) {
+        const { [date]: _removed, ...restDates } = nextMap[app.user_email];
+        nextMap[app.user_email] = restDates;
+      }
+      await saveApprovedSlotsMap(shiftId, nextMap);
+      setApprovedSlotsMap(nextMap);
+    }
+
+    await loadDetail();
+  };
 
   if (loading) {
     return (
@@ -372,34 +497,14 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
             {!is_admin && showApplicationForm && (
               <div className="border-t pt-4 space-y-3">
-                <h3 className="font-medium">就業可能な日と時間を選択してください</h3>
-                {dailySchedules.map((schedule, index) => (
-                  <div key={schedule.date} className="border rounded-lg p-4 bg-white">
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id={`schedule-${index}`}
-                        checked={schedule.checked}
-                        onCheckedChange={(checked) => handleCheckChange(index, checked as boolean)}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <Label htmlFor={`schedule-${index}`} className="text-base cursor-pointer">{formatDate(schedule.date)}</Label>
-                        {schedule.checked && (
-                          <div className="grid grid-cols-2 gap-3 mt-3">
-                            <div>
-                              <Label htmlFor={`start-${index}`} className="text-sm text-gray-600">開始時刻</Label>
-                              <Input id={`start-${index}`} type="time" value={schedule.start_time} onChange={(e) => handleTimeChange(index, 'start_time', e.target.value)} className="mt-1" />
-                            </div>
-                            <div>
-                              <Label htmlFor={`end-${index}`} className="text-sm text-gray-600">終了時刻</Label>
-                              <Input id={`end-${index}`} type="time" value={schedule.end_time} onChange={(e) => handleTimeChange(index, 'end_time', e.target.value)} className="mt-1" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                <h3 className="font-medium">カレンダーで就業可能日と時間を選択してください</h3>
+                <ShiftApplicationCalendar
+                  dailySchedules={dailySchedules}
+                  onCheckChange={handleCheckChange}
+                  onTimeChange={handleTimeChange}
+                  desiredShiftsPerWeek={desiredShiftsPerWeek}
+                  onDesiredShiftsChange={setDesiredShiftsPerWeek}
+                />
                 <div className="flex gap-2">
                   <Button onClick={handleApply} disabled={applying} className="flex-1">{applying ? '応募中...' : '応募する'}</Button>
                   <Button variant="outline" onClick={() => setShowApplicationForm(false)} disabled={applying}>キャンセル</Button>
@@ -445,6 +550,14 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              <Tabs value={adminTab} onValueChange={setAdminTab}>
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="daily">日付別管理</TabsTrigger>
+                  <TabsTrigger value="wish">希望一覧</TabsTrigger>
+                  <TabsTrigger value="result">採用結果一覧</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="daily" className="space-y-4 mt-4">
               {shift.results_published && (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
@@ -521,6 +634,55 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                   )}
                 </div>
               )}
+                </TabsContent>
+
+                <TabsContent value="wish" className="space-y-4 mt-4">
+                  <ShiftCalendarView
+                    dailySchedules={dailySchedules}
+                    dateApplications={dateApplications}
+                    onDateClick={setSelectedDate}
+                    selectedDate={selectedDate}
+                  />
+                  <ShiftGridView
+                    mode="wish"
+                    dailySchedules={gridDailySchedules}
+                    dateApplications={dateApplications}
+                    groupMembers={groupMembers}
+                    customBreakpoints={[]}
+                    shiftStartTime={shift.start_time}
+                    shiftEndTime={shift.end_time}
+                    roles={roles}
+                    approvedSlotsMap={approvedSlotsMap}
+                    wishTimesMap={wishTimesMap}
+                    isAdmin={true}
+                    onApproveSlot={handleApproveSlot}
+                    onUnapproveSlot={handleUnapproveSlot}
+                  />
+                  <DesiredShiftsTracker
+                    applications={applications as any}
+                    dateApplications={dateApplications as any}
+                    dailySchedules={dailySchedules as any}
+                  />
+                </TabsContent>
+
+                <TabsContent value="result" className="space-y-4 mt-4">
+                  <ShiftGridView
+                    mode="result"
+                    dailySchedules={gridDailySchedules}
+                    dateApplications={dateApplications}
+                    groupMembers={groupMembers}
+                    customBreakpoints={[]}
+                    shiftStartTime={shift.start_time}
+                    shiftEndTime={shift.end_time}
+                    roles={roles}
+                    approvedSlotsMap={approvedSlotsMap}
+                    wishTimesMap={wishTimesMap}
+                    isAdmin={true}
+                    onApproveSlot={handleApproveSlot}
+                    onUnapproveSlot={handleUnapproveSlot}
+                  />
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         )}
