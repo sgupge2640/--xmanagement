@@ -44,7 +44,7 @@ export function CreateSwapRequestDialog({
 
   const handleCreate = async () => {
     if (!reason.trim()) {
-      toast.error('交代琁E��を�E力してください');
+      toast.error('交代理由を入力してください');
       return;
     }
 
@@ -58,12 +58,12 @@ export function CreateSwapRequestDialog({
         end_time: endTime,
         reason: reason.trim(),
       });
-      toast.success('交代申請を作�Eしました');
+      toast.success('交代申請を作成しました');
       setReason('');
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
-      toast.error(error.message || '交代申請�E作�Eに失敗しました');
+      toast.error(error.message || '交代申請の作成に失敗しました');
     } finally {
       setCreating(false);
     }
@@ -73,15 +73,15 @@ export function CreateSwapRequestDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>シフト交代申請を作�E</DialogTitle>
+          <DialogTitle>シフト交代申請を作成</DialogTitle>
           <DialogDescription>
-            こ�Eシフトの交代を希望する琁E��を�E力してください
+            このシフトの交代を希望する理由を入力してください
           </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label className="text-sm font-medium">シフト惁E��</Label>
+            <Label className="text-sm font-medium">シフト情報</Label>
             <div className="p-3 bg-gray-50 rounded-lg space-y-1">
               <div className="text-sm font-medium">{shiftTitle}</div>
               <div className="text-sm text-gray-600">

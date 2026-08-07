@@ -68,7 +68,7 @@ export function FilterTagsManager({ groupId, onTagsChange }: FilterTagsManagerPr
       setTags(updated);
       onTagsChange?.(updated);
       setNewTagName('');
-      toast.success(`タグ、E{name}」を追加しました`);
+      toast.success(`タグ「${name}」を追加しました`);
     } catch {
       toast.error('タグの保存に失敗しました');
     } finally {
@@ -100,7 +100,7 @@ export function FilterTagsManager({ groupId, onTagsChange }: FilterTagsManagerPr
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <Tag className="h-4 w-4 text-blue-600" />
-            フィルター機�E
+            フィルター機能
             <Badge variant="secondary" className="text-xs">{tags.length}件</Badge>
           </CardTitle>
           {expanded ? <ChevronUp className="h-4 w-4 text-gray-500" /> : <ChevronDown className="h-4 w-4 text-gray-500" />}
@@ -122,7 +122,8 @@ export function FilterTagsManager({ groupId, onTagsChange }: FilterTagsManagerPr
       {expanded && (
         <CardContent className="p-4 pt-0 space-y-4">
           <p className="text-xs text-gray-500">
-            シフト採用時に応募老E��絞り込むためのタグを管琁E��ます。メンバ�E管琁E��面で吁E��ンバ�Eにタグを割り当てられます、E          </p>
+            シフト採用時に応募者を絞り込むためのタグを管理します。メンバー管理画面でメンバーにタグを割り当てられます。
+          </p>
 
           {/* 既存タグ一覧 */}
           {loading ? (

@@ -214,7 +214,7 @@ app.post("/make-server-aba46d8b/groups/join", async (c) => {
     // グループを検索
     const groupId = await kvGet(`group:code:${code}`);
     if (!groupId) {
-      return c.json({ error: 'グループが見つ��りません' }, 404);
+      return c.json({ error: 'グループが見つかりません' }, 404);
     }
     
     const group = await kvGet(`group:${groupId}`);

@@ -182,7 +182,7 @@ export function GroupDashboard({
         </div>
       </div>
 
-      {/* メインコンチE��チE*/}
+      {/* メインコンテンツ */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {error ? (
           <RLSErrorHelper error={error} />
@@ -265,7 +265,7 @@ export function GroupDashboard({
                           <Calendar className="h-4 w-4" />
                           {shift.start_date === shift.end_date 
                             ? formatDate(shift.start_date)
-                            : `${formatDate(shift.start_date)} 、E${formatDate(shift.end_date)}`}
+                            : `${formatDate(shift.start_date)} ～ ${formatDate(shift.end_date)}`}
                         </div>
                         <div className="flex items-center gap-1">
                           <Clock className="h-4 w-4" />
@@ -280,7 +280,7 @@ export function GroupDashboard({
                       </div>
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <div className="text-sm text-gray-600">
-                          <span className="font-medium">応募締刁E</span>{' '}
+                          <span className="font-medium">応募締切</span>{' '}
                           <span className={isDeadlinePassed(shift.application_deadline) ? 'text-red-600' : ''}>
                             {formatDateTime(shift.application_deadline)}
                           </span>
@@ -290,7 +290,7 @@ export function GroupDashboard({
                         <div className="mt-2">
                           <Badge variant="secondary">
                             <AlertCircle className="h-3 w-3 mr-1 inline" />
-                            {shift.pending_count}件の承認征E��応募
+                            {shift.pending_count}件の承認待ち応募
                           </Badge>
                         </div>
                       )}

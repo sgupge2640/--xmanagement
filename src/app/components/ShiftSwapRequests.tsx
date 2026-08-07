@@ -59,7 +59,8 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [reason, setReason] = useState('');
   
-  // 管琁E��E��メント用の状慁E  const [commentDialogOpen, setCommentDialogOpen] = useState(false);
+  // 管理者向けコメント用の状態
+  const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [commentAction, setCommentAction] = useState<'approve' | 'reject'>('approve');
   const [selectedRequestId, setSelectedRequestId] = useState<number | null>(null);
   const [adminComment, setAdminComment] = useState('');
@@ -69,9 +70,9 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
     try {
       setLoading(true);
       const data = await getSwapRequests(groupId);
-      // APIレスポンスから配�Eを取征E      setRequests(data.requests || []);
+      setRequests(data.requests || []);
     } catch (error: any) {
-      toast.error(error.message || '交代申請�E取得に失敗しました');
+      toast.error(error.message || '交代申請の取得に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -85,10 +86,10 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
     setProcessing(requestId);
     try {
       await acceptSwapRequest(requestId);
-      toast.success('交代を申し�Eました�E�管琁E��E�E承認をお征E��ください');
+      toast.success('交代に応募しました。管理者の承認をお待ちください');
       await loadRequests();
     } catch (error: any) {
-      toast.error(error.message || '交代の申し�Eに失敗しました');
+      toast.error(error.message || '交代への応募に失敗しました');
     } finally {
       setProcessing(null);
     }
@@ -147,7 +148,7 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
     if (activeTab === 'my_requests') return req.requester_email === userEmail;
     if (activeTab === 'available') return (req.status === 'pending' || req.status === 'accepted') && req.requester_email !== userEmail;
     if (activeTab === 'my_accepted') {
-      // 自刁E��応募した申請を表示
+      // 自分が応募した申請を表示
       return req.applicants?.some(app => app.applicant_email === userEmail) || false;
     }
     if (activeTab === 'pending_approval') return req.status === 'accepted';
@@ -174,14 +175,14 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
   const loadMyShifts = async () => {
     try {
       const data = await getMyShifts();
-      // APIレスポンスから配�Eを取征E      const applications = data.applications || [];
+      const applications = data.applications || [];
       
-      // こ�Eグループ�Eシフトのみをフィルタリング
+      // このグループのシフトのみを抽出
       const groupShifts = applications.filter((app: any) => 
         app.shifts?.group_id === groupId
       );
       
-      // 承認済み・一部承認�Eシフトから日付ごとに展開
+      // 承認済み・一部承認シフトから日付ごとに展開
       const expandedShifts: any[] = [];
       
       for (const app of groupShifts) {
@@ -189,7 +190,7 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
           const shift = app.shifts;
           const schedules = app.daily_schedules || [];
           
-          // daily_schedulesから承認済みの日付�Eみ展開
+          // daily_schedules から承認済みの日付のみ展開
           schedules
             .filter((day: any) => day.status === 'approved')
             .forEach((day: any) => {
@@ -207,8 +208,8 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
       
       setMyShifts(expandedShifts);
     } catch (error: any) {
-      console.error('自刁E�Eシフトの取得エラー:', error);
-      toast.error(error.message || '自刁E�Eシフトの取得に失敗しました');
+      console.error('自分のシフトの取得エラー:', error);
+      toast.error(error.message || '自分のシフトの取得に失敗しました');
     }
   };
 
@@ -218,7 +219,7 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
 
   const handleCreateRequest = async () => {
     if (!selectedShift || reason.trim() === '') {
-      toast.error('シフトと琁E��を�E力してください');
+      toast.error('シフトと理由を入力してください');
       return;
     }
     
@@ -232,13 +233,13 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
         end_time: selectedShift.end_time,
         reason: reason.trim(),
       });
-      toast.success('交代申請を作�Eしました');
+      toast.success('交代申請を作成しました');
       await loadRequests();
       setCreateDialogOpen(false);
       setSelectedShift(null);
       setReason('');
     } catch (error: any) {
-      toast.error(error.message || '交代申請�E作�Eに失敗しました');
+      toast.error(error.message || '交代申請の作成に失敗しました');
     } finally {
       setProcessing(null);
     }
@@ -442,7 +443,7 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
                           className="w-full"
                         >
                           <RefreshCw className="h-4 w-4 mr-2" />
-                          こ�E交代に応募する
+                          この交代に応募する
                         </Button>
                       </div>
                     );
@@ -510,7 +511,7 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
           </div>
         )}
 
-        {/* 申請作�Eダイアログ */}
+        {/* 申請作成ダイアログ */}
         <Dialog open={createDialogOpen} onOpenChange={(open) => {
           setCreateDialogOpen(open);
           if (!open) {
@@ -521,7 +522,7 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
           <DialogTrigger asChild>
             <Button variant="outline" className="mt-4">
               <Plus className="h-4 w-4 mr-2" />
-              交代申請を作�E
+              交代申請を作成
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
@@ -603,7 +604,7 @@ export function ShiftSwapRequests({ groupId, groupName, isAdmin, onBack }: Shift
           </DialogContent>
         </Dialog>
 
-        {/* 管琁E��E��メントダイアログ */}
+        {/* 管理者向けコメントダイアログ */}
         <Dialog open={commentDialogOpen} onOpenChange={(open) => {
           setCommentDialogOpen(open);
           if (!open) {

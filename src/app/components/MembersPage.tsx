@@ -41,7 +41,8 @@ export function MembersPage({ groupId, groupName, onBack }: MembersPageProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // フィルタータグ管琁E  const [availableTags, setAvailableTags] = useState<FilterTag[]>([]);
+  // フィルタータグ管理
+  const [availableTags, setAvailableTags] = useState<FilterTag[]>([]);
   const [memberTags, setMemberTags] = useState<{ [email: string]: string[] }>({});
   const [tagEditTarget, setTagEditTarget] = useState<Member | null>(null);
   const [editingTagIds, setEditingTagIds] = useState<string[]>([]);
@@ -53,7 +54,7 @@ export function MembersPage({ groupId, groupName, onBack }: MembersPageProps) {
       const data = await getGroupMembers(groupId);
       setMembers(data.members || []);
     } catch (error: any) {
-      toast.error(error.message || 'メンバ�E一覧の取得に失敗しました');
+      toast.error(error.message || 'メンバー一覧の取得に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -178,16 +179,17 @@ export function MembersPage({ groupId, groupName, onBack }: MembersPageProps) {
                           {member.role === 'admin' ? (
                             <Badge variant="default" className="text-xs">
                               <Crown className="h-3 w-3 mr-1 inline" />
-                              管琁E��E                            </Badge>
+                              管理者
+                            </Badge>
                           ) : (
                             <Badge variant="secondary" className="text-xs">
                               <User className="h-3 w-3 mr-1 inline" />
-                              メンバ�E
+                              メンバー
                             </Badge>
                           )}
                         </div>
                         <p className="text-xs sm:text-sm text-gray-600 break-all mb-1">{member.user_email}</p>
-                        <p className="text-xs text-gray-500 mb-2">参加日晁E {formatDate(member.joined_at)}</p>
+                        <p className="text-xs text-gray-500 mb-2">参加日時: {formatDate(member.joined_at)}</p>
                         {/* タグ表示 */}
                         <div className="flex flex-wrap gap-1 mt-1">
                           {tags.length > 0 ? tags.map(tag => (
@@ -212,7 +214,7 @@ export function MembersPage({ groupId, groupName, onBack }: MembersPageProps) {
                             className="w-full sm:w-auto text-sm"
                           >
                             <Tag className="h-4 w-4 mr-2" />
-                            フィルター管理
+                            タグ管理
                           </Button>
                         )}
                         {member.role !== 'admin' && (
@@ -240,7 +242,7 @@ export function MembersPage({ groupId, groupName, onBack }: MembersPageProps) {
 
         {availableTags.length === 0 && !loading && (
           <p className="text-xs text-gray-400 mt-4 text-center">
-            ※ フィルタータグはダッシュボードの「フィルター機能」から追加できます
+            ※ タグはダッシュボードの「フィルター機能」から追加できます
           </p>
         )}
       </div>
@@ -249,10 +251,10 @@ export function MembersPage({ groupId, groupName, onBack }: MembersPageProps) {
       <Dialog open={!!tagEditTarget} onOpenChange={open => !open && setTagEditTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{tagEditTarget?.user_name} のフィルター管理</DialogTitle>
+            <DialogTitle>{tagEditTarget?.user_name} のタグ管理</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <p className="text-sm text-gray-500 mb-3">該当するタグにチェチE��を�Eれてください</p>
+            <p className="text-sm text-gray-500 mb-3">該当するタグにチェックを入れてください</p>
             <div className="flex flex-wrap gap-2">
               {availableTags.map(tag => {
                 const selected = editingTagIds.includes(tag.id);

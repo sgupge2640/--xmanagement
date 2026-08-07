@@ -106,7 +106,7 @@ export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectG
       setCalendarLoading(true);
       const data = await getGroupCalendar(groupId);
       
-      // シフトチE�Eタを変換
+      // シフトデータを変換
       const events: any[] = [];
       if (data.shifts && data.shifts.length > 0) {
         data.shifts.forEach((shift: any) => {
