@@ -1,8 +1,13 @@
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 const app = new Hono();
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
 // Enable logger
 app.use('*', logger(console.log));
@@ -22,6 +27,87 @@ app.use(
 // Health check endpoint
 app.get("/make-server-9d73baa6/health", (c) => {
   return c.json({ status: "ok" });
+});
+
+// ========== Auth Support ==========
+
+async function findAuthUserIdByEmail(email: string): Promise<string | null> {
+  let page = 1;
+  const perPage = 200;
+
+  while (page <= 20) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+
+    const users = data?.users ?? [];
+    const found = users.find((user) => (user.email || "").toLowerCase() === email.toLowerCase());
+    if (found?.id) return found.id;
+
+    if (users.length < perPage) break;
+    page += 1;
+  }
+
+  return null;
+}
+
+app.post("/make-server-9d73baa6/auth/reset-password", async (c) => {
+  try {
+    if (!supabaseUrl || !serviceRoleKey) {
+      return c.json({ error: "サーバー設定が不正です" }, 500);
+    }
+
+    const { email, name, newPassword } = await c.req.json();
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    const normalizedName = String(name || "").trim();
+    const normalizedPassword = String(newPassword || "");
+
+    if (!normalizedEmail || !normalizedName || !normalizedPassword) {
+      return c.json({ error: "メールアドレス・名前・新しいパスワードは必須です" }, 400);
+    }
+
+    if (normalizedPassword.length < 6) {
+      return c.json({ error: "パスワードは6文字以上で入力してください" }, 400);
+    }
+
+    const { data: profile, error: profileError } = await adminClient
+      .from("users")
+      .select("email, name")
+      .eq("email", normalizedEmail)
+      .maybeSingle();
+
+    if (profileError) {
+      console.log("reset-password profile lookup error:", profileError.message);
+      return c.json({ error: "再設定に失敗しました" }, 500);
+    }
+
+    if (!profile) {
+      return c.json({ error: "メールアドレスまたは名前が一致しません" }, 400);
+    }
+
+    const dbName = String(profile.name || "").trim();
+    if (dbName !== normalizedName) {
+      return c.json({ error: "メールアドレスまたは名前が一致しません" }, 400);
+    }
+
+    const authUserId = await findAuthUserIdByEmail(normalizedEmail);
+    if (!authUserId) {
+      return c.json({ error: "メールアドレスまたは名前が一致しません" }, 400);
+    }
+
+    const { error: updateError } = await adminClient.auth.admin.updateUserById(authUserId, {
+      password: normalizedPassword,
+    });
+
+    if (updateError) {
+      console.log("reset-password update error:", updateError.message);
+      return c.json({ error: "パスワードの更新に失敗しました" }, 500);
+    }
+
+    return c.json({ ok: true, message: "パスワードを再設定しました" });
+  } catch (error: any) {
+    console.log("reset-password unexpected error:", error?.message || error);
+    return c.json({ error: "再設定に失敗しました" }, 500);
+  }
 });
 
 // ========== Filter Tags ==========

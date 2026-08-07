@@ -161,6 +161,26 @@ export async function updatePassword(currentPassword: string, newPassword: strin
   return { success: true };
 }
 
+// パスワード再設定（ログイン不可時: メールアドレス + 名前で本人確認）
+export async function resetPasswordByEmailAndName(email: string, name: string, newPassword: string) {
+  const response = await fetch(`${SERVER_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': publicAnonKey,
+      'Authorization': `Bearer ${publicAnonKey}`,
+    },
+    body: JSON.stringify({ email, name, newPassword }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'パスワード再設定に失敗しました');
+  }
+
+  return { success: true, message: data.message || 'パスワードを再設定しました' };
+}
+
 // ========== Group API ==========
 
 // グループ作成
