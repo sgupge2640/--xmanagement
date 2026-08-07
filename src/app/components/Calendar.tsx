@@ -8,6 +8,7 @@ interface CalendarEvent {
   date: string;
   start_time: string;
   end_time: string;
+  time_label?: string;
   title: string;
   group_name?: string;
   status?: string;
@@ -61,6 +62,11 @@ export function Calendar({ events, isAdmin = false, loading = false }: CalendarP
   };
 
   const selectedDateEvents = selectedDate ? events.filter(event => event.date === selectedDate) : [];
+
+  const getEventTimeText = (event: CalendarEvent) => {
+    if (event.time_label && event.time_label.trim().length > 0) return event.time_label;
+    return `${event.start_time?.slice(0, 5)} - ${event.end_time?.slice(0, 5)}`;
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -131,7 +137,7 @@ export function Calendar({ events, isAdmin = false, loading = false }: CalendarP
                 {isAdmin ? event.user_name : event.group_name}
               </div>
               <div className="truncate text-[9px] sm:text-xs">
-                {event.start_time?.slice(0, 5)} - {event.end_time?.slice(0, 5)}
+                {getEventTimeText(event)}
               </div>
             </div>
           ))}
@@ -241,7 +247,7 @@ export function Calendar({ events, isAdmin = false, loading = false }: CalendarP
                       <div className="space-y-1 text-xs sm:text-sm text-gray-600">
                         <div className="flex items-center gap-1 sm:gap-2">
                           <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                          <span>{event.start_time?.slice(0, 5)} - {event.end_time?.slice(0, 5)}</span>
+                          <span>{getEventTimeText(event)}</span>
                         </div>
                         {isAdmin && event.shift_title && (
                           <div className="flex items-center gap-1 sm:gap-2">

@@ -153,11 +153,13 @@ export function MyPage({ onCreateGroup, onJoinGroup, onManageRequests, onSelectG
             const mergedRanges = getMergedSlotRanges(ownSlotsByDate[day.date]);
             const startTime = mergedRanges[0].start;
             const endTime = mergedRanges[mergedRanges.length - 1].end;
+            const timeLabel = mergedRanges.map((range) => `${range.start}-${range.end}`).join(' / ');
 
             return {
               date: day.date,
               start_time: startTime,
               end_time: endTime,
+              time_label: timeLabel,
               title: shift.title,
               group_name: groupName,
               status: day.status,
