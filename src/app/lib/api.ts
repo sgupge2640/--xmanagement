@@ -167,7 +167,6 @@ export async function resetPasswordByEmailAndName(email: string, name: string, n
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'apikey': publicAnonKey,
       'Authorization': `Bearer ${publicAnonKey}`,
     },
     body: JSON.stringify({ email, name, newPassword }),
