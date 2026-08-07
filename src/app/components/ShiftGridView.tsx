@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { Download, Megaphone } from 'lucide-react';
 import type { ShiftRole, ApprovedSlot } from '../lib/api';
@@ -81,6 +81,8 @@ export function ShiftGridView({
     x: number; y: number;
   } | null>(null);
   const [approving, setApproving] = useState(false);
+  const [orderedMembers, setOrderedMembers] = useState<{ user_email: string; user_name: string }[]>([]);
+  const [draggingEmail, setDraggingEmail] = useState<string | null>(null);
   // 非表示の応募を除外したデータ
   const filteredDateApplications = useMemo(() => {
     const result: { [date: string]: ApplicationWithTime[] } = {};
@@ -111,18 +113,41 @@ export function ShiftGridView({
         result.push(m);
       }
     });
-    Object.values(filteredDateApplications).forEach(apps =>
+    Object.values(filteredDateApplications).forEach(apps => {
       apps.forEach(app => {
         if (!seen.has(app.user_email)) {
           seen.add(app.user_email);
           result.push({ user_email: app.user_email, user_name: app.user_name });
         }
-      })
-    );
+      });
+    });
     return result;
   }, [groupMembers, filteredDateApplications, allApplicantEmails]);
 
-  if (dailySchedules.length === 0 || members.length === 0) {
+  useEffect(() => {
+    setOrderedMembers((current) => {
+      const currentOrder = current.filter((member) => members.some((item) => item.user_email === member.user_email));
+      const missing = members.filter((member) => !currentOrder.some((item) => item.user_email === member.user_email));
+      return [...currentOrder, ...missing];
+    });
+  }, [members]);
+
+  const displayMembers = orderedMembers.length > 0 ? orderedMembers : members;
+
+  const moveMember = (fromEmail: string, toEmail: string) => {
+    if (fromEmail === toEmail) return;
+    setOrderedMembers((current) => {
+      const sourceIndex = current.findIndex((member) => member.user_email === fromEmail);
+      const targetIndex = current.findIndex((member) => member.user_email === toEmail);
+      if (sourceIndex === -1 || targetIndex === -1) return current;
+      const next = [...current];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  };
+
+  if (dailySchedules.length === 0 || displayMembers.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">応募データがありません</div>
     );
@@ -248,7 +273,7 @@ export function ShiftGridView({
         });
 
         // データ行
-        members.forEach((member, mi) => {
+        displayMembers.forEach((member, mi) => {
           const y = HEADER_ROWS * CELL_H + mi * CELL_H;
           const rowBg = mi % 2 === 0 ? '#ffffff' : '#f9fafb';
           drawCell(0, y, NAME_W, CELL_H, rowBg, member.user_name, '#111111');
@@ -453,9 +478,32 @@ export function ShiftGridView({
         </thead>
 
         <tbody>
-          {members.map(member => (
-            <tr key={member.user_email} className="hover:bg-gray-50">
-              <td className="sticky left-0 z-10 bg-white border border-gray-400 px-3 py-1 font-medium whitespace-nowrap">
+          {displayMembers.map(member => (
+            <tr
+              key={member.user_email}
+              className={`hover:bg-gray-50 ${draggingEmail === member.user_email ? 'opacity-50' : ''}`}
+              onDragOver={(e) => {
+                if (!isAdmin || mode !== 'result') return;
+                e.preventDefault();
+              }}
+              onDrop={(e) => {
+                if (!isAdmin || mode !== 'result' || !draggingEmail) return;
+                e.preventDefault();
+                moveMember(draggingEmail, member.user_email);
+                setDraggingEmail(null);
+              }}
+              onDragEnd={() => setDraggingEmail(null)}
+            >
+              <td
+                className={`sticky left-0 z-10 bg-white border border-gray-400 px-3 py-1 font-medium whitespace-nowrap ${isAdmin && mode === 'result' ? 'cursor-grab select-none' : ''}`}
+                draggable={isAdmin && mode === 'result'}
+                onDragStart={() => {
+                  if (!isAdmin || mode !== 'result') return;
+                  setDraggingEmail(member.user_email);
+                }}
+                title={isAdmin && mode === 'result' ? 'ドラッグして並び替え' : undefined}
+              >
+                <span className="mr-2 text-gray-400">≡</span>
                 {member.user_name}
               </td>
               {dailySchedules.map(({ date }) => {
