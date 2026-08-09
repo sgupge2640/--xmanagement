@@ -408,7 +408,7 @@ export function ShiftApplicationCalendar({
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded border-2 border-amber-200 bg-amber-50"></div>
-                <span>発表済み（再提出不可）</span>
+                <span>固定日（再提出不可）</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded border-2 border-gray-100 bg-gray-50"></div>

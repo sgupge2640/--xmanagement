@@ -590,7 +590,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <CardTitle className="text-2xl">{shift.title}</CardTitle>
                   {isDeadlinePassed && <Badge variant="outline" className="text-red-600 border-red-600">締切終了</Badge>}
-                  {shift.results_published && <Badge variant="outline" className="text-blue-600 border-blue-600">結果発表済み</Badge>}
                 </div>
                 <CardDescription>{shift.group_name}</CardDescription>
               </div>
@@ -621,12 +620,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
               <span className="font-medium text-gray-700">応募締切: </span>
               <span className={isDeadlinePassed ? 'text-red-600 font-medium' : 'text-gray-700'}>{formatDateTime(shift.application_deadline)}</span>
             </div>
-
-            {!is_admin && shift.results_published && (
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                結果発表中です。発表済みの日程は固定され、未発表の日程のみ再提出できます。
-              </div>
-            )}
 
             {!is_admin && !showApplicationForm && (
               <Button onClick={() => setShowApplicationForm(true)} disabled={isDeadlinePassed} className="w-full">
