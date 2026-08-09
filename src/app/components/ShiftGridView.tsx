@@ -4,6 +4,7 @@ import { Download, Megaphone } from 'lucide-react';
 import type { ShiftRole, ApprovedSlot } from '../lib/api';
 
 type ExcelCellValue = string | number;
+type ExcelCell = { value: ExcelCellValue; styleId?: number };
 
 interface ApplicationWithTime {
   id: number;
@@ -79,18 +80,84 @@ function getExcelColumnName(index: number) {
   return result;
 }
 
-function buildWorksheetXml(rows: ExcelCellValue[][]) {
+function normalizeHexColor(color: string) {
+  const normalized = color.replace('#', '').trim();
+  if (normalized.length === 3) {
+    return normalized.split('').map((char) => char + char).join('').toUpperCase();
+  }
+  return normalized.padStart(6, '0').slice(0, 6).toUpperCase();
+}
+
+function buildStylesXml(roleColors: string[]) {
+  const fills = [
+    '<fill><patternFill patternType="none"/></fill>',
+    '<fill><patternFill patternType="gray125"/></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFF3F4F6"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFFEF2F2"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFEFF6FF"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFFAF5FF"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF7ED"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFFFFBEB"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFDCFCE7"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFE5E7EB"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFDBEAFE"/><bgColor indexed="64"/></patternFill></fill>',
+  ];
+
+  roleColors.forEach((color) => {
+    fills.push(`<fill><patternFill patternType="solid"><fgColor rgb="FF${normalizeHexColor(color)}"/><bgColor indexed="64"/></patternFill></fill>`);
+  });
+
+  const alignCenter = 'applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/>';
+  const cellXfs = [
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>',
+    `<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+    `<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+    `<xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+    `<xf numFmtId="0" fontId="0" fillId="5" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+    `<xf numFmtId="0" fontId="0" fillId="6" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+    `<xf numFmtId="0" fontId="0" fillId="7" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+    `<xf numFmtId="0" fontId="0" fillId="8" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+    `<xf numFmtId="0" fontId="0" fillId="9" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+    `<xf numFmtId="0" fontId="0" fillId="10" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+  ];
+
+  const roleStyleIds: Record<string, number> = {};
+  roleColors.forEach((color, index) => {
+    const styleId = cellXfs.length;
+    roleStyleIds[color] = styleId;
+    cellXfs.push(`<xf numFmtId="0" fontId="0" fillId="${11 + index}" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`);
+  });
+
+  const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="${fills.length}">${fills.join('')}</fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="${cellXfs.length}">${cellXfs.join('')}</cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+  return { xml, roleStyleIds };
+}
+
+function buildWorksheetXml(rows: ExcelCell[][], merges: string[] = []) {
   const lastColumn = getExcelColumnName(Math.max(...rows.map((row) => Math.max(row.length, 1))));
   const sheetRows = rows.map((row, rowIndex) => {
     const cells = row.map((value, cellIndex) => {
       const ref = `${getExcelColumnName(cellIndex + 1)}${rowIndex + 1}`;
-      if (typeof value === 'number') {
-        return `<c r="${ref}"><v>${value}</v></c>`;
+      const styleAttr = value.styleId !== undefined ? ` s="${value.styleId}"` : '';
+      if (typeof value.value === 'number') {
+        return `<c r="${ref}"${styleAttr}><v>${value.value}</v></c>`;
       }
-      return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(String(value))}</t></is></c>`;
+      return `<c r="${ref}" t="inlineStr"${styleAttr}><is><t>${escapeXml(String(value.value))}</t></is></c>`;
     }).join('');
     return `<row r="${rowIndex + 1}">${cells}</row>`;
   }).join('');
+
+  const mergeXml = merges.length > 0
+    ? `<mergeCells count="${merges.length}">${merges.map((merge) => `<mergeCell ref="${merge}"/>`).join('')}</mergeCells>`
+    : '';
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
@@ -104,6 +171,7 @@ function buildWorksheetXml(rows: ExcelCellValue[][]) {
     <col min="2" max="${Math.max(...rows.map((row) => row.length), 2)}" width="10" customWidth="1"/>
   </cols>
   <sheetData>${sheetRows}</sheetData>
+  ${mergeXml}
 </worksheet>`;
 }
 
@@ -156,6 +224,7 @@ export function ShiftGridView({
   const slots: Slot[] = customBreakpoints.length > 0
     ? [...customBreakpoints].sort((a, b) => a.start.localeCompare(b.start))
     : [{ start: shiftStartTime.slice(0, 5), end: shiftEndTime.slice(0, 5), name: '' }];
+  const displaySlotLabel = (slot: Slot) => slot.name || `${slot.start.slice(0, 5)}-${slot.end.slice(0, 5)}`;
 
   // 応募している全メンバーを抽出（グループメンバー + 応募者）
   const allApplicantEmails = useMemo(() => {
@@ -422,20 +491,33 @@ export function ShiftGridView({
     try {
       const { zipSync, strToU8 } = await import('fflate');
       const label = mode === 'result' ? '採用結果一覧' : '勤務可能一覧';
+      const { xml: stylesXml, roleStyleIds } = buildStylesXml(roles.map((role) => role.color));
+      const headerTopRow: ExcelCell[] = [{ value: '名前', styleId: 1 }];
+      const headerBottomRow: ExcelCell[] = [{ value: '', styleId: 1 }];
+      const merges: string[] = ['A1:A2'];
 
-      const headerRow: ExcelCellValue[] = ['名前'];
+      let currentColumn = 2;
       dailySchedules.forEach(({ date, displayDate }) => {
-        const dayOfWeek = DAY_NAMES[new Date(date + 'T00:00:00').getDay()];
-        slots.forEach((slot) => {
-          const slotLabel = slot.name ? `${slot.name} ${slot.start}-${slot.end}` : `${slot.start}-${slot.end}`;
-          headerRow.push(`${(displayDate ?? date).replace(/\d{4}\//, '').replace(/\(.+\)/, '')} ${dayOfWeek} ${slotLabel}`);
-        });
+        const currentDate = new Date(date + 'T00:00:00');
+        const dayOfWeek = DAY_NAMES[currentDate.getDay()];
+        const dayStyleId = currentDate.getDay() === 0 ? 2 : currentDate.getDay() === 6 ? 3 : 1;
+        const topLabel = `${(displayDate ?? date).replace(/\d{4}\//, '').replace(/\(.+\)/, '')}\n${dayOfWeek}`;
+        headerTopRow.push({ value: topLabel, styleId: dayStyleId });
+        for (let slotIndex = 1; slotIndex < slots.length; slotIndex += 1) {
+          headerTopRow.push({ value: '', styleId: dayStyleId });
+        }
+        headerBottomRow.push(...slots.map((slot) => ({ value: displaySlotLabel(slot), styleId: 4 })));
+
+        if (slots.length > 1) {
+          merges.push(`${getExcelColumnName(currentColumn)}1:${getExcelColumnName(currentColumn + slots.length - 1)}1`);
+        }
+        currentColumn += slots.length;
       });
 
-      const rows: ExcelCellValue[][] = [headerRow];
+      const rows: ExcelCell[][] = [headerTopRow, headerBottomRow];
 
       displayMembers.forEach((member) => {
-        const row: ExcelCellValue[] = [member.user_name];
+        const row: ExcelCell[] = [{ value: member.user_name, styleId: 1 }];
 
         dailySchedules.forEach(({ date }) => {
           const apps = filteredDateApplications[date] || [];
@@ -443,12 +525,12 @@ export function ShiftGridView({
           const kvSlots = approvedSlotsMap[member.user_email]?.[date];
 
           slots.forEach((slot) => {
-            let cellValue = '';
+            let styleId = 8;
             if (app) {
               const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
               const wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
               if (wishOverlap) {
-                cellValue = '○';
+                styleId = 6;
                 if (
                   mode === 'result' &&
                   ((kvSlots && kvSlots.some((item) => overlaps(item.start, item.end, slot.start, slot.end))) ||
@@ -456,30 +538,30 @@ export function ShiftGridView({
                 ) {
                   const matchingKvSlot = kvSlots?.find((item) => overlaps(item.start, item.end, slot.start, slot.end));
                   const cellRole = matchingKvSlot?.roleId ? roles.find((role) => role.id === matchingKvSlot.roleId) : undefined;
-                  cellValue = cellRole ? `★${cellRole.name}` : '●';
+                  styleId = cellRole ? roleStyleIds[cellRole.color] ?? 7 : 7;
                 }
               }
             }
-            row.push(cellValue);
+            row.push({ value: '', styleId });
           });
         });
 
         rows.push(row);
       });
 
-      const availableCountsRow: ExcelCellValue[] = ['勤務可能人数'];
+      const availableCountsRow: ExcelCell[] = [{ value: '勤務可能人数', styleId: 5 }];
       dailySchedules.forEach(({ date }) => {
         slots.forEach((slot) => {
-          availableCountsRow.push(wishCounts[`${date}__${slot.name || slot.start}`] ?? 0);
+          availableCountsRow.push({ value: wishCounts[`${date}__${slot.name || slot.start}`] ?? 0, styleId: 5 });
         });
       });
       rows.push(availableCountsRow);
 
       if (mode === 'result') {
-        const approvedCountsRow: ExcelCellValue[] = ['採用人数'];
+        const approvedCountsRow: ExcelCell[] = [{ value: '採用人数', styleId: 9 }];
         dailySchedules.forEach(({ date }) => {
           slots.forEach((slot) => {
-            approvedCountsRow.push(resultCounts[`${date}__${slot.name || slot.start}`] ?? 0);
+            approvedCountsRow.push({ value: resultCounts[`${date}__${slot.name || slot.start}`] ?? 0, styleId: 9 });
           });
         });
         rows.push(approvedCountsRow);
@@ -512,23 +594,13 @@ export function ShiftGridView({
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 </Types>`;
 
-      const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
-  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
-  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
-  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
-  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
-</styleSheet>`;
-
       const workbook = zipSync({
         '[Content_Types].xml': strToU8(contentTypesXml),
         '_rels/.rels': strToU8(rootRelsXml),
         'xl/workbook.xml': strToU8(workbookXml),
         'xl/_rels/workbook.xml.rels': strToU8(workbookRelsXml),
         'xl/styles.xml': strToU8(stylesXml),
-        'xl/worksheets/sheet1.xml': strToU8(buildWorksheetXml(rows)),
+        'xl/worksheets/sheet1.xml': strToU8(buildWorksheetXml(rows, merges)),
       });
 
       downloadBlob(
@@ -616,9 +688,8 @@ export function ShiftGridView({
       <div className="overflow-x-auto" ref={tableRef}>
       <table className="border-collapse text-xs min-w-max">
         <thead>
-          {/* 日付行 */}
           <tr>
-            <th className="sticky left-0 z-20 bg-gray-100 border border-gray-400 px-3 py-2 text-left min-w-[120px]">
+            <th rowSpan={2} className="sticky left-0 z-20 bg-gray-100 border border-gray-400 px-3 py-2 text-left min-w-[120px] align-middle">
               名前
             </th>
             {dailySchedules.map(({ date, displayDate }) => {
@@ -629,7 +700,7 @@ export function ShiftGridView({
                 <th
                   key={date}
                   colSpan={slots.length}
-                  className={`border border-gray-400 px-2 py-1 text-center font-medium ${
+                  className={`border border-gray-400 px-2 py-1 text-center font-medium align-top ${
                     isSun ? 'text-red-600 bg-red-50' : isSat ? 'text-blue-600 bg-blue-50' : 'bg-gray-50'
                   }`}
                 >
@@ -651,23 +722,19 @@ export function ShiftGridView({
               );
             })}
           </tr>
-          {/* スロット名行 */}
-          {slots.length > 1 && (
-            <tr>
-              <th className="sticky left-0 z-20 bg-gray-100 border border-gray-400 px-3 py-1" />
-              {dailySchedules.map(({ date }) =>
-                slots.map((slot, slotIndex) => (
-                  <th
-                    key={`head-${date}-${slotIndex}-${slot.name || slot.start}`}
-                    className="border border-gray-400 px-1 py-1 text-center bg-purple-50 text-purple-700 font-medium min-w-[36px]"
-                    title={`${slot.start}〜${slot.end}`}
-                  >
-                    {slot.name || slot.start.slice(0, 5)}
-                  </th>
-                ))
-              )}
-            </tr>
-          )}
+          <tr>
+            {dailySchedules.map(({ date }) =>
+              slots.map((slot, slotIndex) => (
+                <th
+                  key={`head-${date}-${slotIndex}-${slot.name || slot.start}`}
+                  className="border border-gray-400 px-1 py-1 text-center bg-purple-50 text-purple-700 font-medium min-w-[52px]"
+                  title={`${slot.start}〜${slot.end}`}
+                >
+                  {displaySlotLabel(slot)}
+                </th>
+              ))
+            )}
+          </tr>
         </thead>
 
         <tbody>
@@ -736,11 +803,11 @@ export function ShiftGridView({
 
                   const bgClass =
                     cellState === 'approved' && !cellRole
-                      ? 'bg-green-400'
+                      ? 'bg-green-300'
                       : cellState === 'wish'
-                      ? 'bg-white'
+                      ? 'bg-amber-200'
                       : cellState === 'none'
-                      ? 'bg-gray-300'
+                      ? 'bg-gray-200'
                       : '';
                   const bgStyle = cellState === 'approved' && cellRole
                     ? { backgroundColor: cellRole.color }
@@ -777,13 +844,7 @@ export function ShiftGridView({
                           : ''
                       }
                       onClick={handleClick}
-                    >
-                      {cellState !== 'none' && (
-                        <span className={`text-xs leading-none ${cellState === 'approved' ? 'text-white' : 'text-gray-600'}`}>
-                          {cellState === 'approved' ? (cellRole ? '★' : '●') : '○'}
-                        </span>
-                      )}
-                    </td>
+                    />
                   );
                 });
               })}
@@ -841,16 +902,16 @@ export function ShiftGridView({
       {/* 凡例 */}
       <div className="flex gap-4 mt-3 text-xs text-gray-600 flex-wrap">
         <div className="flex items-center gap-1.5">
-          <div className="w-5 h-5 border border-gray-400 bg-white rounded flex items-center justify-center">○</div>
+          <div className="w-5 h-5 border border-gray-400 bg-amber-200 rounded" />
           <span>勤務可能</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-5 h-5 border border-gray-400 bg-green-400 rounded flex items-center justify-center text-white">●</div>
+          <div className="w-5 h-5 border border-gray-400 bg-green-300 rounded" />
           <span>採用済み{isAdmin && onApproveSlot ? '（クリックでロール変更・取り消し）' : ''}</span>
         </div>
         {isAdmin && onApproveSlot && (
           <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 border border-gray-400 bg-white rounded flex items-center justify-center text-gray-600">○</div>
+            <div className="w-5 h-5 border border-gray-400 bg-amber-200 rounded" />
             <span>勤務可能（クリックで即採用）</span>
           </div>
         )}
