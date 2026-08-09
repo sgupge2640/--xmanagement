@@ -644,38 +644,36 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const currentUserEmail = localStorage.getItem('user_email') || '';
   const userApplication = applications.find((app) => app.user_email === currentUserEmail);
   const isDeadlinePassed = new Date(shift.application_deadline) < new Date();
-  const applicantWeeklySummaries = useMemo(() => {
-    return applications
-      .map((application) => {
-        const availableDays = application.daily_schedule?.length || 0;
-        const approvedDays = (application.daily_schedule || []).filter(
-          (day) => day.status === 'approved' || day.status === 'direct_approved',
-        ).length;
-        const weeksCount = dailySchedules.length > 0 ? Math.ceil(dailySchedules.length / 7) : 0;
-        const desiredPerWeek = application.desired_shifts_per_week ?? null;
-        const desiredTotal = desiredPerWeek ? desiredPerWeek * weeksCount : null;
-        const achievementRate = desiredTotal && desiredTotal > 0
-          ? Math.round((approvedDays / desiredTotal) * 100)
-          : null;
+  const applicantWeeklySummaries = applications
+    .map((application) => {
+      const availableDays = application.daily_schedule?.length || 0;
+      const approvedDays = (application.daily_schedule || []).filter(
+        (day) => day.status === 'approved' || day.status === 'direct_approved',
+      ).length;
+      const weeksCount = dailySchedules.length > 0 ? Math.ceil(dailySchedules.length / 7) : 0;
+      const desiredPerWeek = application.desired_shifts_per_week ?? null;
+      const desiredTotal = desiredPerWeek ? desiredPerWeek * weeksCount : null;
+      const achievementRate = desiredTotal && desiredTotal > 0
+        ? Math.round((approvedDays / desiredTotal) * 100)
+        : null;
 
-        return {
-          id: application.id,
-          user_name: application.user_name,
-          user_email: application.user_email,
-          desiredPerWeek,
-          desiredTotal,
-          availableDays,
-          approvedDays,
-          achievementRate,
-        };
-      })
-      .sort((left, right) => {
-        if ((right.desiredPerWeek ?? 0) !== (left.desiredPerWeek ?? 0)) {
-          return (right.desiredPerWeek ?? 0) - (left.desiredPerWeek ?? 0);
-        }
-        return right.availableDays - left.availableDays;
-      });
-  }, [applications, dailySchedules.length]);
+      return {
+        id: application.id,
+        user_name: application.user_name,
+        user_email: application.user_email,
+        desiredPerWeek,
+        desiredTotal,
+        availableDays,
+        approvedDays,
+        achievementRate,
+      };
+    })
+    .sort((left, right) => {
+      if ((right.desiredPerWeek ?? 0) !== (left.desiredPerWeek ?? 0)) {
+        return (right.desiredPerWeek ?? 0) - (left.desiredPerWeek ?? 0);
+      }
+      return right.availableDays - left.availableDays;
+    });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
