@@ -1,9 +1,18 @@
 import { useState } from 'react';
 import { Button } from './ui/button';
+import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent } from './ui/card';
 import { Checkbox } from './ui/checkbox';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from './ui/dialog';
 
 interface DailyScheduleItem {
   date: string;
@@ -29,8 +38,6 @@ export function ShiftApplicationCalendar({
   onDesiredShiftsChange,
   disabledDates = [],
 }: ShiftApplicationCalendarProps) {
-  void onTimeChange;
-
   const [currentMonth, setCurrentMonth] = useState(() => {
     if (dailySchedules.length > 0) {
       const firstDate = dailySchedules[0].date;
@@ -38,10 +45,17 @@ export function ShiftApplicationCalendar({
     }
     return new Date();
   });
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showTimeDialog, setShowTimeDialog] = useState(false);
   const [showWeeklyMode, setShowWeeklyMode] = useState(false);
+  const [weeklyStartTime, setWeeklyStartTime] = useState('09:00');
+  const [weeklyEndTime, setWeeklyEndTime] = useState('18:00');
   const [selectedDays, setSelectedDays] = useState<boolean[]>([false, false, false, false, false, false, false]); // 日〜土
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [multiSelectedDates, setMultiSelectedDates] = useState<Set<string>>(new Set());
+  const [showMultiTimeDialog, setShowMultiTimeDialog] = useState(false);
+  const [multiStartTime, setMultiStartTime] = useState('09:00');
+  const [multiEndTime, setMultiEndTime] = useState('18:00');
 
   const getScheduleIndex = (dateStr: string): number => {
     return dailySchedules.findIndex(s => s.date === dateStr);
@@ -97,27 +111,63 @@ export function ShiftApplicationCalendar({
       return;
     }
 
-    onCheckChange(index, !dailySchedules[index].checked);
+    const schedule = dailySchedules[index];
+
+    if (!schedule.checked) {
+      onCheckChange(index, true);
+      setSelectedDate(dateStr);
+      setShowTimeDialog(true);
+    } else {
+      setSelectedDate(dateStr);
+      setShowTimeDialog(true);
+    }
   };
 
   const applyMultiSelectUnavailable = () => {
+    if (!multiStartTime || !multiEndTime || multiStartTime >= multiEndTime) {
+      return;
+    }
+
     multiSelectedDates.forEach(dateStr => {
       const index = getScheduleIndex(dateStr);
       if (index !== -1) {
         if (disabledDates.includes(dateStr)) return;
         onCheckChange(index, true);
+        onTimeChange(index, 'start_time', multiStartTime);
+        onTimeChange(index, 'end_time', multiEndTime);
       }
     });
+    setShowMultiTimeDialog(false);
     setMultiSelectedDates(new Set());
     setMultiSelectMode(false);
   };
 
+  const handleUnavailableClear = () => {
+    if (!selectedDate) return;
+    const index = getScheduleIndex(selectedDate);
+    if (index !== -1) {
+      onCheckChange(index, false);
+    }
+    setShowTimeDialog(false);
+    setSelectedDate(null);
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('ja-JP', {
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+    });
+  };
+
   const grid = generateCalendarGrid();
+  const selectedSchedule = selectedDate ? dailySchedules[getScheduleIndex(selectedDate)] : null;
   const unavailableCount = dailySchedules.filter(s => s.checked).length;
   const availableCount = dailySchedules.length - unavailableCount;
 
   const applyWeeklyUnavailable = () => {
-    if (!selectedDays.some(d => d)) {
+    if (!selectedDays.some(d => d) || !weeklyStartTime || !weeklyEndTime || weeklyStartTime >= weeklyEndTime) {
       return;
     }
 
@@ -129,6 +179,8 @@ export function ShiftApplicationCalendar({
 
       if (selectedDays[dayOfWeek]) {
         onCheckChange(index, true);
+        onTimeChange(index, 'start_time', weeklyStartTime);
+        onTimeChange(index, 'end_time', weeklyEndTime);
       }
     });
 
@@ -182,7 +234,11 @@ export function ShiftApplicationCalendar({
           <>
             <Button
               variant="default"
-              onClick={applyMultiSelectUnavailable}
+              onClick={() => {
+                if (multiSelectedDates.size > 0) {
+                  setShowMultiTimeDialog(true);
+                }
+              }}
               disabled={multiSelectedDates.size === 0}
               className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700"
             >
@@ -243,9 +299,35 @@ export function ShiftApplicationCalendar({
                 </div>
               ))}
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="weekly-unavailable-start" className="text-sm text-gray-700 mb-1 block">
+                  勤務できない開始時刻
+                </Label>
+                <Input
+                  id="weekly-unavailable-start"
+                  type="time"
+                  step="600"
+                  value={weeklyStartTime}
+                  onChange={(e) => setWeeklyStartTime(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="weekly-unavailable-end" className="text-sm text-gray-700 mb-1 block">
+                  勤務できない終了時刻
+                </Label>
+                <Input
+                  id="weekly-unavailable-end"
+                  type="time"
+                  step="600"
+                  value={weeklyEndTime}
+                  onChange={(e) => setWeeklyEndTime(e.target.value)}
+                />
+              </div>
+            </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setShowWeeklyMode(false)}>閉じる</Button>
-              <Button onClick={applyWeeklyUnavailable} disabled={!selectedDays.some((d) => d)}>
+              <Button onClick={applyWeeklyUnavailable} disabled={!selectedDays.some((d) => d) || weeklyStartTime >= weeklyEndTime}>
                 曜日で不可日を反映
               </Button>
             </div>
@@ -333,6 +415,11 @@ export function ShiftApplicationCalendar({
                     <span>{date.getDate()}</span>
                     {isSelected && <X className="h-3 w-3 mt-0.5" />}
                   </div>
+                  {isSelected && schedule && (
+                    <div className="absolute bottom-0 left-0 right-0 text-[8px] bg-red-700 bg-opacity-80 rounded-b px-0.5 truncate">
+                      {schedule.start_time.slice(0, 5)}-{schedule.end_time.slice(0, 5)}
+                    </div>
+                  )}
                 </button>
               );
             })}
@@ -366,6 +453,120 @@ export function ShiftApplicationCalendar({
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={showMultiTimeDialog} onOpenChange={(open) => {
+        setShowMultiTimeDialog(open);
+        if (!open) {
+          setMultiSelectedDates(new Set());
+          setMultiSelectMode(false);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>選択した日に勤務できない時間帯を設定</DialogTitle>
+            <DialogDescription>
+              {multiSelectedDates.size}日分に同じ時間帯を勤務不可として設定します
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            <div>
+              <Label htmlFor="multi-unavailable-start" className="text-sm text-gray-700 mb-2 block">
+                勤務できない開始時刻
+              </Label>
+              <Input
+                id="multi-unavailable-start"
+                type="time"
+                step="600"
+                value={multiStartTime}
+                onChange={(e) => setMultiStartTime(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="multi-unavailable-end" className="text-sm text-gray-700 mb-2 block">
+                勤務できない終了時刻
+              </Label>
+              <Input
+                id="multi-unavailable-end"
+                type="time"
+                step="600"
+                value={multiEndTime}
+                onChange={(e) => setMultiEndTime(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowMultiTimeDialog(false)}>キャンセル</Button>
+            <Button onClick={applyMultiSelectUnavailable} disabled={multiStartTime >= multiEndTime}>
+              一括設定
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showTimeDialog} onOpenChange={setShowTimeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>勤務できない時間帯の設定</DialogTitle>
+            <DialogDescription>
+              {selectedDate && formatDate(selectedDate)} に勤務できない時間帯を設定してください
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedSchedule && (
+            <div className="py-4 space-y-4">
+              <div>
+                <Label htmlFor="dialog-unavailable-start" className="text-sm text-gray-700 mb-2 block">
+                  開始時刻
+                </Label>
+                <Input
+                  id="dialog-unavailable-start"
+                  type="time"
+                  step="600"
+                  value={selectedSchedule.start_time}
+                  onChange={(e) => {
+                    const index = getScheduleIndex(selectedDate!);
+                    if (index !== -1) {
+                      onTimeChange(index, 'start_time', e.target.value);
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="dialog-unavailable-end" className="text-sm text-gray-700 mb-2 block">
+                  終了時刻
+                </Label>
+                <Input
+                  id="dialog-unavailable-end"
+                  type="time"
+                  step="600"
+                  value={selectedSchedule.end_time}
+                  onChange={(e) => {
+                    const index = getScheduleIndex(selectedDate!);
+                    if (index !== -1) {
+                      onTimeChange(index, 'end_time', e.target.value);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleUnavailableClear}
+              className="text-red-600 border-red-300 hover:bg-red-50"
+            >
+              この日の勤務不可を解除
+            </Button>
+            <Button onClick={() => setShowTimeDialog(false)} disabled={(selectedSchedule?.start_time || '') >= (selectedSchedule?.end_time || '')}>
+              完了
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

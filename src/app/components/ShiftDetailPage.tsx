@@ -322,13 +322,71 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   };
 
   const handleApply = async () => {
-    const availableSchedules = dailySchedules
-      .filter((item) => !item.checked && !publishedDates.includes(item.date))
-      .map((item) => ({
-        date: item.date,
-        start_time: item.start_time,
-        end_time: item.end_time,
-      }));
+    const toMinutesSafe = (value: string) => {
+      const text = value.slice(0, 5);
+      const [h, m] = text.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const shiftStart = shift.start_time.slice(0, 5);
+    const shiftEnd = shift.end_time.slice(0, 5);
+    const shiftStartMin = toMinutesSafe(shiftStart);
+    const shiftEndMin = toMinutesSafe(shiftEnd);
+
+    const availableSchedules: Array<{ date: string; start_time: string; end_time: string }> = [];
+
+    for (const item of dailySchedules) {
+      if (publishedDates.includes(item.date)) continue;
+
+      if (!item.checked) {
+        availableSchedules.push({
+          date: item.date,
+          start_time: shiftStart,
+          end_time: shiftEnd,
+        });
+        continue;
+      }
+
+      const unavailableStart = item.start_time.slice(0, 5);
+      const unavailableEnd = item.end_time.slice(0, 5);
+      const unavailableStartMin = toMinutesSafe(unavailableStart);
+      const unavailableEndMin = toMinutesSafe(unavailableEnd);
+
+      if (unavailableStartMin >= unavailableEndMin) {
+        toast.error(`${formatDate(item.date)} の勤務不可時間が不正です`);
+        return;
+      }
+
+      if (unavailableStartMin < shiftStartMin || unavailableEndMin > shiftEndMin) {
+        toast.error(`${formatDate(item.date)} の勤務不可時間はシフト時間内で指定してください`);
+        return;
+      }
+
+      if (unavailableStartMin === shiftStartMin && unavailableEndMin === shiftEndMin) {
+        continue;
+      }
+
+      if (unavailableStartMin === shiftStartMin) {
+        availableSchedules.push({
+          date: item.date,
+          start_time: unavailableEnd,
+          end_time: shiftEnd,
+        });
+        continue;
+      }
+
+      if (unavailableEndMin === shiftEndMin) {
+        availableSchedules.push({
+          date: item.date,
+          start_time: shiftStart,
+          end_time: unavailableStart,
+        });
+        continue;
+      }
+
+      toast.error(`${formatDate(item.date)} は中抜けの勤務不可時間を設定できません（開始側か終了側に寄せてください）`);
+      return;
+    }
 
     if (availableSchedules.length === 0) {
       toast.error('勤務可能日がありません。勤務できない日の選択を見直してください');
@@ -640,7 +698,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
             {!is_admin && showApplicationForm && (
               <div className="border-t pt-4 space-y-3">
-                <h3 className="font-medium">カレンダーで勤務できない日を選択してください（未選択日は勤務可能として提出されます）</h3>
+                <h3 className="font-medium">勤務できない日・時間帯を選択してください（未選択日は終日勤務可能として提出されます）</h3>
                 <ShiftApplicationCalendar
                   dailySchedules={dailySchedules}
                   onCheckChange={handleCheckChange}
