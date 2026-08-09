@@ -5,6 +5,7 @@ import type { ShiftRole, ApprovedSlot } from '../lib/api';
 
 type ExcelCellValue = string | number;
 type ExcelCell = { value: ExcelCellValue; styleId?: number };
+type BorderVariant = 'grid' | 'left' | 'right' | 'both';
 
 interface ApplicationWithTime {
   id: number;
@@ -88,6 +89,15 @@ function normalizeHexColor(color: string) {
   return normalized.padStart(6, '0').slice(0, 6).toUpperCase();
 }
 
+function getBorderVariant(slotIndex: number, totalSlots: number): BorderVariant {
+  const isFirst = slotIndex === 0;
+  const isLast = slotIndex === totalSlots - 1;
+  if (isFirst && isLast) return 'both';
+  if (isFirst) return 'left';
+  if (isLast) return 'right';
+  return 'grid';
+}
+
 function buildStylesXml(roleColors: string[]) {
   const fills = [
     '<fill><patternFill patternType="none"/></fill>',
@@ -107,38 +117,64 @@ function buildStylesXml(roleColors: string[]) {
     fills.push(`<fill><patternFill patternType="solid"><fgColor rgb="FF${normalizeHexColor(color)}"/><bgColor indexed="64"/></patternFill></fill>`);
   });
 
-  const alignCenter = 'applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/>';
-  const cellXfs = [
-    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>',
-    `<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
-    `<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
-    `<xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
-    `<xf numFmtId="0" fontId="0" fillId="5" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
-    `<xf numFmtId="0" fontId="0" fillId="6" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
-    `<xf numFmtId="0" fontId="0" fillId="7" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
-    `<xf numFmtId="0" fontId="0" fillId="8" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
-    `<xf numFmtId="0" fontId="0" fillId="9" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
-    `<xf numFmtId="0" fontId="0" fillId="10" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`,
+  const borders = [
+    '<border><left/><right/><top/><bottom/><diagonal/></border>',
+    '<border><left style="thin"><color rgb="FF6B7280"/></left><right style="thin"><color rgb="FF6B7280"/></right><top style="thin"><color rgb="FF6B7280"/></top><bottom style="thin"><color rgb="FF6B7280"/></bottom><diagonal/></border>',
+    '<border><left style="medium"><color rgb="FF374151"/></left><right style="thin"><color rgb="FF6B7280"/></right><top style="thin"><color rgb="FF6B7280"/></top><bottom style="thin"><color rgb="FF6B7280"/></bottom><diagonal/></border>',
+    '<border><left style="thin"><color rgb="FF6B7280"/></left><right style="medium"><color rgb="FF374151"/></right><top style="thin"><color rgb="FF6B7280"/></top><bottom style="thin"><color rgb="FF6B7280"/></bottom><diagonal/></border>',
+    '<border><left style="medium"><color rgb="FF374151"/></left><right style="medium"><color rgb="FF374151"/></right><top style="thin"><color rgb="FF6B7280"/></top><bottom style="thin"><color rgb="FF6B7280"/></bottom><diagonal/></border>',
   ];
 
-  const roleStyleIds: Record<string, number> = {};
+  const alignCenter = 'applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/>';
+  const borderIds: Record<BorderVariant, number> = {
+    grid: 1,
+    left: 2,
+    right: 3,
+    both: 4,
+  };
+
+  const cellXfs = [
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>',
+  ];
+
+  const styleIds: Record<string, Record<BorderVariant, number>> = {};
+  const registerStyle = (name: string, fillId: number) => {
+    styleIds[name] = { grid: 0, left: 0, right: 0, both: 0 };
+    (Object.keys(borderIds) as BorderVariant[]).forEach((variant) => {
+      const styleId = cellXfs.length;
+      styleIds[name][variant] = styleId;
+      cellXfs.push(`<xf numFmtId="0" fontId="0" fillId="${fillId}" borderId="${borderIds[variant]}" xfId="0" applyFill="1" applyBorder="1" ${alignCenter}</xf>`);
+    });
+  };
+
+  registerStyle('headerWeekday', 2);
+  registerStyle('headerSunday', 3);
+  registerStyle('headerSaturday', 4);
+  registerStyle('slotHeader', 5);
+  registerStyle('footerWish', 6);
+  registerStyle('footerResult', 7);
+  registerStyle('wishCell', 8);
+  registerStyle('emptyCell', 9);
+  registerStyle('approvedCell', 10);
+
+  const roleStyleIds: Record<string, Record<BorderVariant, number>> = {};
   roleColors.forEach((color, index) => {
-    const styleId = cellXfs.length;
-    roleStyleIds[color] = styleId;
-    cellXfs.push(`<xf numFmtId="0" fontId="0" fillId="${11 + index}" borderId="0" xfId="0" applyFill="1" ${alignCenter}</xf>`);
+    const styleKey = `role:${color}`;
+    registerStyle(styleKey, 11 + index);
+    roleStyleIds[color] = styleIds[styleKey];
   });
 
   const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
   <fills count="${fills.length}">${fills.join('')}</fills>
-  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <borders count="${borders.length}">${borders.join('')}</borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
   <cellXfs count="${cellXfs.length}">${cellXfs.join('')}</cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
-  return { xml, roleStyleIds };
+  return { xml, roleStyleIds, styleIds };
 }
 
 function buildWorksheetXml(rows: ExcelCell[][], merges: string[] = []) {
@@ -491,22 +527,32 @@ export function ShiftGridView({
     try {
       const { zipSync, strToU8 } = await import('fflate');
       const label = mode === 'result' ? '採用結果一覧' : '勤務可能一覧';
-      const { xml: stylesXml, roleStyleIds } = buildStylesXml(roles.map((role) => role.color));
-      const headerTopRow: ExcelCell[] = [{ value: '名前', styleId: 1 }];
-      const headerBottomRow: ExcelCell[] = [{ value: '', styleId: 1 }];
+      const { xml: stylesXml, roleStyleIds, styleIds } = buildStylesXml(roles.map((role) => role.color));
+      const headerTopRow: ExcelCell[] = [{ value: '名前', styleId: styleIds.headerWeekday.both }];
+      const headerBottomRow: ExcelCell[] = [{ value: '', styleId: styleIds.headerWeekday.both }];
       const merges: string[] = ['A1:A2'];
 
       let currentColumn = 2;
       dailySchedules.forEach(({ date, displayDate }) => {
         const currentDate = new Date(date + 'T00:00:00');
         const dayOfWeek = DAY_NAMES[currentDate.getDay()];
-        const dayStyleId = currentDate.getDay() === 0 ? 2 : currentDate.getDay() === 6 ? 3 : 1;
+        const dayStyleName = currentDate.getDay() === 0
+          ? 'headerSunday'
+          : currentDate.getDay() === 6
+          ? 'headerSaturday'
+          : 'headerWeekday';
         const topLabel = `${(displayDate ?? date).replace(/\d{4}\//, '').replace(/\(.+\)/, '')}\n${dayOfWeek}`;
-        headerTopRow.push({ value: topLabel, styleId: dayStyleId });
-        for (let slotIndex = 1; slotIndex < slots.length; slotIndex += 1) {
-          headerTopRow.push({ value: '', styleId: dayStyleId });
-        }
-        headerBottomRow.push(...slots.map((slot) => ({ value: displaySlotLabel(slot), styleId: 4 })));
+        slots.forEach((_, slotIndex) => {
+          const borderVariant = getBorderVariant(slotIndex, slots.length);
+          headerTopRow.push({
+            value: slotIndex === 0 ? topLabel : '',
+            styleId: styleIds[dayStyleName][borderVariant],
+          });
+          headerBottomRow.push({
+            value: displaySlotLabel(slots[slotIndex]),
+            styleId: styleIds.slotHeader[borderVariant],
+          });
+        });
 
         if (slots.length > 1) {
           merges.push(`${getExcelColumnName(currentColumn)}1:${getExcelColumnName(currentColumn + slots.length - 1)}1`);
@@ -517,7 +563,7 @@ export function ShiftGridView({
       const rows: ExcelCell[][] = [headerTopRow, headerBottomRow];
 
       displayMembers.forEach((member) => {
-        const row: ExcelCell[] = [{ value: member.user_name, styleId: 1 }];
+        const row: ExcelCell[] = [{ value: member.user_name, styleId: styleIds.headerWeekday.grid }];
 
         dailySchedules.forEach(({ date }) => {
           const apps = filteredDateApplications[date] || [];
@@ -525,12 +571,13 @@ export function ShiftGridView({
           const kvSlots = approvedSlotsMap[member.user_email]?.[date];
 
           slots.forEach((slot) => {
-            let styleId = 8;
+            const borderVariant = getBorderVariant(slots.indexOf(slot), slots.length);
+            let styleId = styleIds.emptyCell[borderVariant];
             if (app) {
               const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
               const wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
               if (wishOverlap) {
-                styleId = 6;
+                styleId = styleIds.wishCell[borderVariant];
                 if (
                   mode === 'result' &&
                   ((kvSlots && kvSlots.some((item) => overlaps(item.start, item.end, slot.start, slot.end))) ||
@@ -538,7 +585,9 @@ export function ShiftGridView({
                 ) {
                   const matchingKvSlot = kvSlots?.find((item) => overlaps(item.start, item.end, slot.start, slot.end));
                   const cellRole = matchingKvSlot?.roleId ? roles.find((role) => role.id === matchingKvSlot.roleId) : undefined;
-                  styleId = cellRole ? roleStyleIds[cellRole.color] ?? 7 : 7;
+                  styleId = cellRole
+                    ? roleStyleIds[cellRole.color]?.[borderVariant] ?? styleIds.approvedCell[borderVariant]
+                    : styleIds.approvedCell[borderVariant];
                 }
               }
             }
@@ -549,19 +598,27 @@ export function ShiftGridView({
         rows.push(row);
       });
 
-      const availableCountsRow: ExcelCell[] = [{ value: '勤務可能人数', styleId: 5 }];
+      const availableCountsRow: ExcelCell[] = [{ value: '勤務可能人数', styleId: styleIds.footerWish.grid }];
       dailySchedules.forEach(({ date }) => {
-        slots.forEach((slot) => {
-          availableCountsRow.push({ value: wishCounts[`${date}__${slot.name || slot.start}`] ?? 0, styleId: 5 });
+        slots.forEach((slot, slotIndex) => {
+          const borderVariant = getBorderVariant(slotIndex, slots.length);
+          availableCountsRow.push({
+            value: wishCounts[`${date}__${slot.name || slot.start}`] ?? 0,
+            styleId: styleIds.footerWish[borderVariant],
+          });
         });
       });
       rows.push(availableCountsRow);
 
       if (mode === 'result') {
-        const approvedCountsRow: ExcelCell[] = [{ value: '採用人数', styleId: 9 }];
+        const approvedCountsRow: ExcelCell[] = [{ value: '採用人数', styleId: styleIds.footerResult.grid }];
         dailySchedules.forEach(({ date }) => {
-          slots.forEach((slot) => {
-            approvedCountsRow.push({ value: resultCounts[`${date}__${slot.name || slot.start}`] ?? 0, styleId: 9 });
+          slots.forEach((slot, slotIndex) => {
+            const borderVariant = getBorderVariant(slotIndex, slots.length);
+            approvedCountsRow.push({
+              value: resultCounts[`${date}__${slot.name || slot.start}`] ?? 0,
+              styleId: styleIds.footerResult[borderVariant],
+            });
           });
         });
         rows.push(approvedCountsRow);
