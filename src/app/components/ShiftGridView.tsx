@@ -154,7 +154,7 @@ export function ShiftGridView({
     );
   }
 
-  // スロットごとの応募人数・採用人数を集計
+  // スロットごとの勤務可能人数・採用人数を集計
   const wishCounts: { [dateSlot: string]: number } = {};
   const resultCounts: { [dateSlot: string]: number } = {};
   dailySchedules.forEach(({ date }) => {
@@ -306,9 +306,9 @@ export function ShiftGridView({
           });
         });
 
-        // フッター: 応募人数
+        // フッター: 勤務可能人数
         const footerY = (HEADER_ROWS + rows) * CELL_H;
-        drawCell(0, footerY, NAME_W, CELL_H, '#fff7ed', '応募人数', '#9a3412', true);
+        drawCell(0, footerY, NAME_W, CELL_H, '#fff7ed', '勤務可能人数', '#9a3412', true);
         chunk.forEach(({ date }, di) => {
           slots.forEach((slot, si) => {
             const x = NAME_W + (di * slots.length + si) * CELL_W;
@@ -568,7 +568,7 @@ export function ShiftGridView({
                       });
                       return;
                     }
-                    // 希望あり → 即時採用
+                    // 勤務可能 → 即時採用
                     const existKvSlots = kvSlots ?? [];
                     handleInstantApprove(app.id, date, slot.start, slot.end, existKvSlots, `idx:${slotIndex}`);
                   };
@@ -582,7 +582,7 @@ export function ShiftGridView({
                         cellState === 'approved'
                           ? `採用済み${cellRole ? `（${cellRole.name}）` : ''}: ${(matchingKvSlot?.start ?? app!.start_time).slice(0,5)}〜${(matchingKvSlot?.end ?? app!.end_time).slice(0,5)}${isClickable ? '（クリックで取り消し）' : ''}`
                           : cellState === 'wish'
-                          ? `希望: ${(wishTimesMap[app!.user_email]?.[date]?.start ?? app!.original_start_time).slice(0,5)}〜${(wishTimesMap[app!.user_email]?.[date]?.end ?? app!.original_end_time).slice(0,5)}${isClickable ? '（クリックで採用）' : ''}`
+                          ? `勤務可能: ${(wishTimesMap[app!.user_email]?.[date]?.start ?? app!.original_start_time).slice(0,5)}〜${(wishTimesMap[app!.user_email]?.[date]?.end ?? app!.original_end_time).slice(0,5)}${isClickable ? '（クリックで採用）' : ''}`
                           : ''
                       }
                       onClick={handleClick}
@@ -600,12 +600,12 @@ export function ShiftGridView({
           ))}
         </tbody>
 
-        {/* フッター: 応募人数・採用人数 */}
+        {/* フッター: 勤務可能人数・採用人数 */}
         <tfoot>
-          {/* 応募人数 */}
+          {/* 勤務可能人数 */}
           <tr>
             <td className="sticky left-0 z-10 bg-orange-50 border border-gray-400 px-3 py-1 font-medium text-orange-800 whitespace-nowrap">
-              応募人数
+              勤務可能人数
             </td>
             {dailySchedules.map(({ date }) =>
               slots.map((slot, slotIndex) => {
@@ -651,7 +651,7 @@ export function ShiftGridView({
       <div className="flex gap-4 mt-3 text-xs text-gray-600 flex-wrap">
         <div className="flex items-center gap-1.5">
           <div className="w-5 h-5 border border-gray-400 bg-white rounded flex items-center justify-center">○</div>
-          <span>希望あり</span>
+          <span>勤務可能</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-5 h-5 border border-gray-400 bg-green-400 rounded flex items-center justify-center text-white">●</div>
@@ -660,7 +660,7 @@ export function ShiftGridView({
         {isAdmin && onApproveSlot && (
           <div className="flex items-center gap-1.5">
             <div className="w-5 h-5 border border-gray-400 bg-white rounded flex items-center justify-center text-gray-600">○</div>
-            <span>希望あり（クリックで即採用）</span>
+            <span>勤務可能（クリックで即採用）</span>
           </div>
         )}
         <div className="flex items-center gap-1.5">

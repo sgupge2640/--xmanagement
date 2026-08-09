@@ -184,12 +184,30 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         data.shift.end_time,
       ).map((item) => {
         const userDay = userScheduleMap.get(item.date);
-        if (!userDay || lockedDateSet.has(item.date)) {
+        if (lockedDateSet.has(item.date)) {
+          if (!userDay) return item;
+          return {
+            ...item,
+            start_time: userDay.start_time,
+            end_time: userDay.end_time,
+          };
+        }
+
+        // 勤務不可日入力方式: checked=true を「勤務不可」として扱う
+        if (!currentUserApplication) {
           return item;
         }
+
+        if (!userDay) {
+          return {
+            ...item,
+            checked: true,
+          };
+        }
+
         return {
           ...item,
-          checked: true,
+          checked: false,
           start_time: userDay.start_time,
           end_time: userDay.end_time,
         };
@@ -304,29 +322,22 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   };
 
   const handleApply = async () => {
-    const selectedSchedules = dailySchedules
-      .filter((item) => item.checked)
+    const availableSchedules = dailySchedules
+      .filter((item) => !item.checked && !publishedDates.includes(item.date))
       .map((item) => ({
         date: item.date,
         start_time: item.start_time,
         end_time: item.end_time,
       }));
 
-    const selectedDateSet = new Set(selectedSchedules.map((item) => item.date));
-    const blockedDates = publishedDates.filter((date) => selectedDateSet.has(date));
-    if (blockedDates.length > 0) {
-      toast.error('発表済みの日程は再提出できません');
-      return;
-    }
-
-    if (selectedSchedules.length === 0) {
-      toast.error('少なくとも1日以上選択してください');
+    if (availableSchedules.length === 0) {
+      toast.error('勤務可能日がありません。勤務できない日の選択を見直してください');
       return;
     }
 
     setApplying(true);
     try {
-      await applyToShift(shiftId, selectedSchedules, desiredShiftsPerWeek);
+      await applyToShift(shiftId, availableSchedules, desiredShiftsPerWeek);
       toast.success('シフトに応募しました');
       setShowApplicationForm(false);
       await loadDetail();
@@ -629,7 +640,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
             {!is_admin && showApplicationForm && (
               <div className="border-t pt-4 space-y-3">
-                <h3 className="font-medium">カレンダーで就業可能日と時間を選択してください</h3>
+                <h3 className="font-medium">カレンダーで勤務できない日を選択してください（未選択日は勤務可能として提出されます）</h3>
                 <ShiftApplicationCalendar
                   dailySchedules={dailySchedules}
                   onCheckChange={handleCheckChange}

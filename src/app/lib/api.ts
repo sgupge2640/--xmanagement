@@ -695,7 +695,7 @@ export async function applyToShift(
   }
 
   if (dailySchedule.length === 0) {
-    throw new Error('少なくとも1日以上選択してください');
+    throw new Error('勤務可能日が1日以上必要です');
   }
 
   // 既存応募があれば再提出として未発表日だけ上書き
