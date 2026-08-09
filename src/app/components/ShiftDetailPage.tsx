@@ -60,6 +60,7 @@ interface ShiftDetailData {
     user_name: string;
     status: string;
     applied_at: string;
+    desired_shifts_per_week?: number;
     daily_schedule?: DaySchedule[];
   }>;
   is_admin: boolean;
@@ -643,6 +644,38 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const currentUserEmail = localStorage.getItem('user_email') || '';
   const userApplication = applications.find((app) => app.user_email === currentUserEmail);
   const isDeadlinePassed = new Date(shift.application_deadline) < new Date();
+  const applicantWeeklySummaries = useMemo(() => {
+    return applications
+      .map((application) => {
+        const availableDays = application.daily_schedule?.length || 0;
+        const approvedDays = (application.daily_schedule || []).filter(
+          (day) => day.status === 'approved' || day.status === 'direct_approved',
+        ).length;
+        const weeksCount = dailySchedules.length > 0 ? Math.ceil(dailySchedules.length / 7) : 0;
+        const desiredPerWeek = application.desired_shifts_per_week ?? null;
+        const desiredTotal = desiredPerWeek ? desiredPerWeek * weeksCount : null;
+        const achievementRate = desiredTotal && desiredTotal > 0
+          ? Math.round((approvedDays / desiredTotal) * 100)
+          : null;
+
+        return {
+          id: application.id,
+          user_name: application.user_name,
+          user_email: application.user_email,
+          desiredPerWeek,
+          desiredTotal,
+          availableDays,
+          approvedDays,
+          achievementRate,
+        };
+      })
+      .sort((left, right) => {
+        if ((right.desiredPerWeek ?? 0) !== (left.desiredPerWeek ?? 0)) {
+          return (right.desiredPerWeek ?? 0) - (left.desiredPerWeek ?? 0);
+        }
+        return right.availableDays - left.availableDays;
+      });
+  }, [applications, dailySchedules.length]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -773,6 +806,59 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                   <p className="text-sm text-blue-800 whitespace-pre-wrap">採用された内容だけが利用者のカレンダーに反映されます。</p>
                 </div>
               )}
+
+              <div className="border rounded-lg p-3 sm:p-4 bg-gray-50 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-800">応募者の希望回数一覧</h4>
+                  <p className="text-xs text-gray-600 mt-1">週の希望回数、提出済み勤務可能日数、採用済み日数を一覧で確認できます。</p>
+                </div>
+
+                {applicantWeeklySummaries.length === 0 ? (
+                  <p className="text-sm text-gray-500">応募者がまだいません。</p>
+                ) : (
+                  <div className="space-y-2">
+                    {applicantWeeklySummaries.map((summary) => {
+                      const isBalanced = summary.achievementRate !== null && summary.achievementRate >= 80 && summary.achievementRate <= 120;
+                      const isUnder = summary.achievementRate !== null && summary.achievementRate < 80;
+                      const isOver = summary.achievementRate !== null && summary.achievementRate > 120;
+
+                      return (
+                        <div key={summary.id} className="rounded-lg border bg-white px-3 py-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <div className="font-medium text-sm text-gray-900">{summary.user_name}</div>
+                              <div className="text-xs text-gray-500">{summary.user_email}</div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs">
+                              <Badge variant="outline">
+                                希望: {summary.desiredPerWeek ? `${summary.desiredPerWeek}回/週` : '未設定'}
+                              </Badge>
+                              <Badge variant="outline">勤務可能提出: {summary.availableDays}日</Badge>
+                              <Badge variant="outline">採用済み: {summary.approvedDays}日</Badge>
+                              {summary.desiredTotal ? (
+                                <Badge
+                                  variant={isBalanced ? 'default' : 'outline'}
+                                  className={
+                                    isBalanced
+                                      ? 'bg-green-500'
+                                      : isUnder
+                                      ? 'text-red-600 border-red-300'
+                                      : isOver
+                                      ? 'text-orange-600 border-orange-300'
+                                      : ''
+                                  }
+                                >
+                                  達成率: {summary.achievementRate}%
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
                 <div className="space-y-4">
                   <div className="border rounded-lg p-3 sm:p-4 bg-gray-50 space-y-3">
