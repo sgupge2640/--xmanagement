@@ -686,7 +686,7 @@ export function ShiftGridView({
         </Button>
       </div>
       <div className="overflow-x-auto" ref={tableRef}>
-      <table className="border-collapse text-xs min-w-max">
+      <table className="border-separate border-spacing-0 text-xs min-w-max border border-gray-600">
         <thead>
           <tr>
             <th rowSpan={2} className="sticky left-0 z-20 bg-gray-100 border border-gray-400 px-3 py-2 text-left min-w-[120px] align-middle">
@@ -700,7 +700,7 @@ export function ShiftGridView({
                 <th
                   key={date}
                   colSpan={slots.length}
-                  className={`border border-gray-400 px-2 py-1 text-center font-medium align-top ${
+                  className={`border-y border-r border-gray-500 px-2 py-1 text-center font-medium align-top ${
                     isSun ? 'text-red-600 bg-red-50' : isSat ? 'text-blue-600 bg-blue-50' : 'bg-gray-50'
                   }`}
                 >
@@ -727,7 +727,9 @@ export function ShiftGridView({
               slots.map((slot, slotIndex) => (
                 <th
                   key={`head-${date}-${slotIndex}-${slot.name || slot.start}`}
-                  className="border border-gray-500 px-1 py-1 text-center bg-purple-50 text-purple-700 font-medium min-w-[52px]"
+                  className={`border-b border-r border-gray-500 px-1 py-1 text-center bg-purple-50 text-purple-700 font-medium min-w-[52px] ${
+                    slotIndex === 0 ? 'border-l-2 border-l-gray-700' : ''
+                  } ${slotIndex === slots.length - 1 ? 'border-r-2 border-r-gray-700' : ''}`}
                   title={`${slot.start}〜${slot.end}`}
                 >
                   {displaySlotLabel(slot)}
@@ -755,7 +757,7 @@ export function ShiftGridView({
               onDragEnd={() => setDraggingEmail(null)}
             >
               <td
-                className={`sticky left-0 z-10 bg-white border border-gray-400 px-3 py-1 font-medium whitespace-nowrap ${isAdmin && mode === 'result' ? 'cursor-grab select-none' : ''}`}
+                className={`sticky left-0 z-10 bg-white border-r border-b border-gray-500 px-3 py-1 font-medium whitespace-nowrap ${isAdmin && mode === 'result' ? 'cursor-grab select-none' : ''}`}
                 draggable={isAdmin && mode === 'result'}
                 onDragStart={() => {
                   if (!isAdmin || mode !== 'result') return;
@@ -834,7 +836,9 @@ export function ShiftGridView({
                   return (
                     <td
                       key={`body-${date}-${slotIndex}-${slot.name || slot.start}`}
-                      className={`border border-gray-500 text-center min-w-[36px] h-8 p-0 ${bgClass} ${isClickable ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      className={`border-b border-r border-gray-500 text-center min-w-[36px] h-8 p-0 ${bgClass} ${isClickable ? 'cursor-pointer hover:opacity-80' : ''} ${
+                        slotIndex === 0 ? 'border-l-2 border-l-gray-700' : ''
+                      } ${slotIndex === slots.length - 1 ? 'border-r-2 border-r-gray-700' : ''}`}
                       style={bgStyle}
                       title={
                         cellState === 'approved'
@@ -858,7 +862,7 @@ export function ShiftGridView({
         <tfoot>
           {/* 勤務可能人数 */}
           <tr>
-            <td className="sticky left-0 z-10 bg-orange-50 border border-gray-400 px-3 py-1 font-medium text-orange-800 whitespace-nowrap">
+            <td className="sticky left-0 z-10 bg-orange-50 border-r border-b border-gray-500 px-3 py-1 font-medium text-orange-800 whitespace-nowrap">
               勤務可能人数
             </td>
             {dailySchedules.map(({ date }) =>
@@ -867,7 +871,9 @@ export function ShiftGridView({
                 return (
                   <td
                     key={`${date}-${slotIndex}-${slot.name || slot.start}-wish`}
-                    className="border border-gray-500 text-center font-bold py-1 bg-orange-50 text-orange-800"
+                    className={`border-b border-r border-gray-500 text-center font-bold py-1 bg-orange-50 text-orange-800 ${
+                      slotIndex === 0 ? 'border-l-2 border-l-gray-700' : ''
+                    } ${slotIndex === slots.length - 1 ? 'border-r-2 border-r-gray-700' : ''}`}
                   >
                     {count}
                   </td>
@@ -878,7 +884,7 @@ export function ShiftGridView({
           {/* 採用人数（採用結果モードのみ） */}
           {mode === 'result' && (
             <tr>
-              <td className="sticky left-0 z-10 bg-blue-50 border border-gray-400 px-3 py-1 font-medium text-blue-800 whitespace-nowrap">
+              <td className="sticky left-0 z-10 bg-blue-50 border-r border-b border-gray-500 px-3 py-1 font-medium text-blue-800 whitespace-nowrap">
                 採用人数
               </td>
               {dailySchedules.map(({ date }) =>
@@ -887,9 +893,9 @@ export function ShiftGridView({
                   return (
                     <td
                       key={`${date}-${slotIndex}-${slot.name || slot.start}-result`}
-                      className={`border border-gray-500 text-center font-bold py-1 ${
+                      className={`border-b border-r border-gray-500 text-center font-bold py-1 ${
                         count === 0 ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-800'
-                      }`}
+                      } ${slotIndex === 0 ? 'border-l-2 border-l-gray-700' : ''} ${slotIndex === slots.length - 1 ? 'border-r-2 border-r-gray-700' : ''}`}
                     >
                       {count}
                     </td>
