@@ -727,7 +727,7 @@ export function ShiftGridView({
               slots.map((slot, slotIndex) => (
                 <th
                   key={`head-${date}-${slotIndex}-${slot.name || slot.start}`}
-                  className="border border-gray-400 px-1 py-1 text-center bg-purple-50 text-purple-700 font-medium min-w-[52px]"
+                  className="border border-gray-500 px-1 py-1 text-center bg-purple-50 text-purple-700 font-medium min-w-[52px]"
                   title={`${slot.start}〜${slot.end}`}
                 >
                   {displaySlotLabel(slot)}
@@ -834,7 +834,7 @@ export function ShiftGridView({
                   return (
                     <td
                       key={`body-${date}-${slotIndex}-${slot.name || slot.start}`}
-                      className={`border border-gray-400 text-center min-w-[36px] h-8 ${bgClass} ${isClickable ? 'cursor-pointer hover:opacity-70' : ''}`}
+                      className={`border border-gray-500 text-center min-w-[36px] h-8 p-0 ${bgClass} ${isClickable ? 'cursor-pointer hover:opacity-80' : ''}`}
                       style={bgStyle}
                       title={
                         cellState === 'approved'
@@ -844,7 +844,9 @@ export function ShiftGridView({
                           : ''
                       }
                       onClick={handleClick}
-                    />
+                    >
+                      <div className="h-8 w-full" />
+                    </td>
                   );
                 });
               })}
@@ -865,7 +867,7 @@ export function ShiftGridView({
                 return (
                   <td
                     key={`${date}-${slotIndex}-${slot.name || slot.start}-wish`}
-                    className="border border-gray-400 text-center font-bold py-1 bg-orange-50 text-orange-800"
+                    className="border border-gray-500 text-center font-bold py-1 bg-orange-50 text-orange-800"
                   >
                     {count}
                   </td>
@@ -885,7 +887,7 @@ export function ShiftGridView({
                   return (
                     <td
                       key={`${date}-${slotIndex}-${slot.name || slot.start}-result`}
-                      className={`border border-gray-400 text-center font-bold py-1 ${
+                      className={`border border-gray-500 text-center font-bold py-1 ${
                         count === 0 ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-800'
                       }`}
                     >
