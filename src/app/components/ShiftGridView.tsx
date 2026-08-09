@@ -3,6 +3,8 @@ import { Button } from './ui/button';
 import { Download, Megaphone } from 'lucide-react';
 import type { ShiftRole, ApprovedSlot } from '../lib/api';
 
+type ExcelCellValue = string | number;
+
 interface ApplicationWithTime {
   id: number;
   user_name: string;
@@ -53,6 +55,65 @@ function toMinutes(t: string) {
 
 function overlaps(appStart: string, appEnd: string, slotStart: string, slotEnd: string) {
   return toMinutes(appStart) < toMinutes(slotEnd) && toMinutes(appEnd) > toMinutes(slotStart);
+}
+
+function escapeXml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function getExcelColumnName(index: number) {
+  let current = index;
+  let result = '';
+
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    current = Math.floor((current - 1) / 26);
+  }
+
+  return result;
+}
+
+function buildWorksheetXml(rows: ExcelCellValue[][]) {
+  const lastColumn = getExcelColumnName(Math.max(...rows.map((row) => Math.max(row.length, 1))));
+  const sheetRows = rows.map((row, rowIndex) => {
+    const cells = row.map((value, cellIndex) => {
+      const ref = `${getExcelColumnName(cellIndex + 1)}${rowIndex + 1}`;
+      if (typeof value === 'number') {
+        return `<c r="${ref}"><v>${value}</v></c>`;
+      }
+      return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(String(value))}</t></is></c>`;
+    }).join('');
+    return `<row r="${rowIndex + 1}">${cells}</row>`;
+  }).join('');
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:${lastColumn}${rows.length}"/>
+  <sheetViews>
+    <sheetView workbookViewId="0"/>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="15"/>
+  <cols>
+    <col min="1" max="1" width="18" customWidth="1"/>
+    <col min="2" max="${Math.max(...rows.map((row) => row.length), 2)}" width="10" customWidth="1"/>
+  </cols>
+  <sheetData>${sheetRows}</sheetData>
+</worksheet>`;
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function ShiftGridView({
@@ -177,10 +238,11 @@ export function ShiftGridView({
   });
 
   const tableRef = useRef<HTMLDivElement>(null);
-  const [exporting, setExporting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const handleExportPDF = async () => {
-    setExporting(true);
+    setExportingPdf(true);
     try {
       const { jsPDF } = await import('jspdf');
 
@@ -351,7 +413,132 @@ export function ShiftGridView({
     } catch (e) {
       console.error('PDF export error:', e);
     } finally {
-      setExporting(false);
+      setExportingPdf(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    setExportingExcel(true);
+    try {
+      const { zipSync, strToU8 } = await import('fflate');
+      const label = mode === 'result' ? '採用結果一覧' : '勤務可能一覧';
+
+      const headerRow: ExcelCellValue[] = ['名前'];
+      dailySchedules.forEach(({ date, displayDate }) => {
+        const dayOfWeek = DAY_NAMES[new Date(date + 'T00:00:00').getDay()];
+        slots.forEach((slot) => {
+          const slotLabel = slot.name ? `${slot.name} ${slot.start}-${slot.end}` : `${slot.start}-${slot.end}`;
+          headerRow.push(`${(displayDate ?? date).replace(/\d{4}\//, '').replace(/\(.+\)/, '')} ${dayOfWeek} ${slotLabel}`);
+        });
+      });
+
+      const rows: ExcelCellValue[][] = [headerRow];
+
+      displayMembers.forEach((member) => {
+        const row: ExcelCellValue[] = [member.user_name];
+
+        dailySchedules.forEach(({ date }) => {
+          const apps = filteredDateApplications[date] || [];
+          const app = apps.find((item) => item.user_email === member.user_email);
+          const kvSlots = approvedSlotsMap[member.user_email]?.[date];
+
+          slots.forEach((slot) => {
+            let cellValue = '';
+            if (app) {
+              const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
+              const wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
+              if (wishOverlap) {
+                cellValue = '○';
+                if (
+                  mode === 'result' &&
+                  ((kvSlots && kvSlots.some((item) => overlaps(item.start, item.end, slot.start, slot.end))) ||
+                    ((app.day_status === 'approved' || app.day_status === 'direct_approved') && overlaps(app.start_time, app.end_time, slot.start, slot.end)))
+                ) {
+                  const matchingKvSlot = kvSlots?.find((item) => overlaps(item.start, item.end, slot.start, slot.end));
+                  const cellRole = matchingKvSlot?.roleId ? roles.find((role) => role.id === matchingKvSlot.roleId) : undefined;
+                  cellValue = cellRole ? `★${cellRole.name}` : '●';
+                }
+              }
+            }
+            row.push(cellValue);
+          });
+        });
+
+        rows.push(row);
+      });
+
+      const availableCountsRow: ExcelCellValue[] = ['勤務可能人数'];
+      dailySchedules.forEach(({ date }) => {
+        slots.forEach((slot) => {
+          availableCountsRow.push(wishCounts[`${date}__${slot.name || slot.start}`] ?? 0);
+        });
+      });
+      rows.push(availableCountsRow);
+
+      if (mode === 'result') {
+        const approvedCountsRow: ExcelCellValue[] = ['採用人数'];
+        dailySchedules.forEach(({ date }) => {
+          slots.forEach((slot) => {
+            approvedCountsRow.push(resultCounts[`${date}__${slot.name || slot.start}`] ?? 0);
+          });
+        });
+        rows.push(approvedCountsRow);
+      }
+
+      const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="${escapeXml(label)}" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`;
+
+      const workbookRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+      const rootRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+      const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`;
+
+      const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+      const workbook = zipSync({
+        '[Content_Types].xml': strToU8(contentTypesXml),
+        '_rels/.rels': strToU8(rootRelsXml),
+        'xl/workbook.xml': strToU8(workbookXml),
+        'xl/_rels/workbook.xml.rels': strToU8(workbookRelsXml),
+        'xl/styles.xml': strToU8(stylesXml),
+        'xl/worksheets/sheet1.xml': strToU8(buildWorksheetXml(rows)),
+      });
+
+      downloadBlob(
+        new Blob([workbook], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+        `${label}.xlsx`,
+      );
+    } catch (error) {
+      console.error('Excel export error:', error);
+    } finally {
+      setExportingExcel(false);
     }
   };
 
@@ -416,10 +603,14 @@ export function ShiftGridView({
 
   return (
     <div>
-      <div className="flex justify-end mb-2">
-        <Button size="sm" variant="outline" onClick={handleExportPDF} disabled={exporting}>
+      <div className="flex justify-end mb-2 gap-2">
+        <Button size="sm" variant="outline" onClick={handleExportExcel} disabled={exportingExcel || exportingPdf}>
           <Download className="h-4 w-4 mr-1" />
-          {exporting ? 'PDF生成中...' : 'PDFダウンロード'}
+          {exportingExcel ? 'Excel生成中...' : 'Excelダウンロード'}
+        </Button>
+        <Button size="sm" variant="outline" onClick={handleExportPDF} disabled={exportingPdf || exportingExcel}>
+          <Download className="h-4 w-4 mr-1" />
+          {exportingPdf ? 'PDF生成中...' : 'PDFダウンロード'}
         </Button>
       </div>
       <div className="overflow-x-auto" ref={tableRef}>
