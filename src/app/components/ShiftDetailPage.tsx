@@ -304,11 +304,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   };
 
   const handleApply = async () => {
-    if (detail?.shift.results_published) {
-      toast.error('結果発表中のため再提出できません');
-      return;
-    }
-
     const selectedSchedules = dailySchedules
       .filter((item) => item.checked)
       .map((item) => ({
@@ -629,17 +624,17 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
             {!is_admin && shift.results_published && (
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                このシフトは結果発表中のため再提出できません。公開取り消し後、未発表の日程のみ再提出できます。
+                結果発表中です。発表済みの日程は固定され、未発表の日程のみ再提出できます。
               </div>
             )}
 
-            {!is_admin && !showApplicationForm && !shift.results_published && (
+            {!is_admin && !showApplicationForm && (
               <Button onClick={() => setShowApplicationForm(true)} disabled={isDeadlinePassed} className="w-full">
                 {isDeadlinePassed ? '応募締切済み' : userApplication ? 'このシフトを再提出する' : 'このシフトに応募する'}
               </Button>
             )}
 
-            {!is_admin && showApplicationForm && !shift.results_published && (
+            {!is_admin && showApplicationForm && (
               <div className="border-t pt-4 space-y-3">
                 <h3 className="font-medium">カレンダーで就業可能日と時間を選択してください</h3>
                 <ShiftApplicationCalendar
