@@ -28,6 +28,8 @@ interface ShiftApplicationCalendarProps {
   desiredShiftsPerWeek: number;
   onDesiredShiftsChange: (value: number) => void;
   disabledDates?: string[];
+  shiftStartTime?: string;
+  shiftEndTime?: string;
 }
 
 export function ShiftApplicationCalendar({
@@ -37,6 +39,8 @@ export function ShiftApplicationCalendar({
   desiredShiftsPerWeek,
   onDesiredShiftsChange,
   disabledDates = [],
+  shiftStartTime,
+  shiftEndTime,
 }: ShiftApplicationCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(() => {
     if (dailySchedules.length > 0) {
@@ -50,12 +54,17 @@ export function ShiftApplicationCalendar({
   const [showWeeklyMode, setShowWeeklyMode] = useState(false);
   const [weeklyStartTime, setWeeklyStartTime] = useState('09:00');
   const [weeklyEndTime, setWeeklyEndTime] = useState('18:00');
+  const [weeklyAllDay, setWeeklyAllDay] = useState(false);
   const [selectedDays, setSelectedDays] = useState<boolean[]>([false, false, false, false, false, false, false]); // 日〜土
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [multiSelectedDates, setMultiSelectedDates] = useState<Set<string>>(new Set());
   const [showMultiTimeDialog, setShowMultiTimeDialog] = useState(false);
   const [multiStartTime, setMultiStartTime] = useState('09:00');
   const [multiEndTime, setMultiEndTime] = useState('18:00');
+  const [multiAllDay, setMultiAllDay] = useState(false);
+
+  const defaultShiftStart = (shiftStartTime || dailySchedules[0]?.start_time || '09:00').slice(0, 5);
+  const defaultShiftEnd = (shiftEndTime || dailySchedules[0]?.end_time || '18:00').slice(0, 5);
 
   const getScheduleIndex = (dateStr: string): number => {
     return dailySchedules.findIndex(s => s.date === dateStr);
@@ -124,17 +133,20 @@ export function ShiftApplicationCalendar({
   };
 
   const applyMultiSelectUnavailable = () => {
-    if (!multiStartTime || !multiEndTime || multiStartTime >= multiEndTime) {
+    if (!multiAllDay && (!multiStartTime || !multiEndTime || multiStartTime >= multiEndTime)) {
       return;
     }
+
+    const start = multiAllDay ? defaultShiftStart : multiStartTime;
+    const end = multiAllDay ? defaultShiftEnd : multiEndTime;
 
     multiSelectedDates.forEach(dateStr => {
       const index = getScheduleIndex(dateStr);
       if (index !== -1) {
         if (disabledDates.includes(dateStr)) return;
         onCheckChange(index, true);
-        onTimeChange(index, 'start_time', multiStartTime);
-        onTimeChange(index, 'end_time', multiEndTime);
+        onTimeChange(index, 'start_time', start);
+        onTimeChange(index, 'end_time', end);
       }
     });
     setShowMultiTimeDialog(false);
@@ -167,9 +179,16 @@ export function ShiftApplicationCalendar({
   const availableCount = dailySchedules.length - unavailableCount;
 
   const applyWeeklyUnavailable = () => {
-    if (!selectedDays.some(d => d) || !weeklyStartTime || !weeklyEndTime || weeklyStartTime >= weeklyEndTime) {
+    if (!selectedDays.some(d => d)) {
       return;
     }
+
+    if (!weeklyAllDay && (!weeklyStartTime || !weeklyEndTime || weeklyStartTime >= weeklyEndTime)) {
+      return;
+    }
+
+    const start = weeklyAllDay ? defaultShiftStart : weeklyStartTime;
+    const end = weeklyAllDay ? defaultShiftEnd : weeklyEndTime;
 
     dailySchedules.forEach((schedule, index) => {
       const date = new Date(schedule.date + 'T00:00:00');
@@ -179,8 +198,8 @@ export function ShiftApplicationCalendar({
 
       if (selectedDays[dayOfWeek]) {
         onCheckChange(index, true);
-        onTimeChange(index, 'start_time', weeklyStartTime);
-        onTimeChange(index, 'end_time', weeklyEndTime);
+        onTimeChange(index, 'start_time', start);
+        onTimeChange(index, 'end_time', end);
       }
     });
 
@@ -310,6 +329,7 @@ export function ShiftApplicationCalendar({
                   step="600"
                   value={weeklyStartTime}
                   onChange={(e) => setWeeklyStartTime(e.target.value)}
+                  disabled={weeklyAllDay}
                 />
               </div>
               <div>
@@ -322,12 +342,20 @@ export function ShiftApplicationCalendar({
                   step="600"
                   value={weeklyEndTime}
                   onChange={(e) => setWeeklyEndTime(e.target.value)}
+                  disabled={weeklyAllDay}
                 />
               </div>
             </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <Checkbox checked={weeklyAllDay} onCheckedChange={(checked) => setWeeklyAllDay(checked as boolean)} />
+              終日勤務不可として設定する
+            </label>
+            {weeklyAllDay && (
+              <p className="text-xs text-gray-500">終日勤務不可: {defaultShiftStart} - {defaultShiftEnd}</p>
+            )}
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setShowWeeklyMode(false)}>閉じる</Button>
-              <Button onClick={applyWeeklyUnavailable} disabled={!selectedDays.some((d) => d) || weeklyStartTime >= weeklyEndTime}>
+              <Button onClick={applyWeeklyUnavailable} disabled={!selectedDays.some((d) => d) || (!weeklyAllDay && weeklyStartTime >= weeklyEndTime)}>
                 曜日で不可日を反映
               </Button>
             </div>
@@ -480,6 +508,7 @@ export function ShiftApplicationCalendar({
                 step="600"
                 value={multiStartTime}
                 onChange={(e) => setMultiStartTime(e.target.value)}
+                disabled={multiAllDay}
               />
             </div>
             <div>
@@ -492,13 +521,21 @@ export function ShiftApplicationCalendar({
                 step="600"
                 value={multiEndTime}
                 onChange={(e) => setMultiEndTime(e.target.value)}
+                disabled={multiAllDay}
               />
             </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <Checkbox checked={multiAllDay} onCheckedChange={(checked) => setMultiAllDay(checked as boolean)} />
+              終日勤務不可として設定する
+            </label>
+            {multiAllDay && (
+              <p className="text-xs text-gray-500">終日勤務不可: {defaultShiftStart} - {defaultShiftEnd}</p>
+            )}
           </div>
 
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={() => setShowMultiTimeDialog(false)}>キャンセル</Button>
-            <Button onClick={applyMultiSelectUnavailable} disabled={multiStartTime >= multiEndTime}>
+            <Button onClick={applyMultiSelectUnavailable} disabled={!multiAllDay && multiStartTime >= multiEndTime}>
               一括設定
             </Button>
           </DialogFooter>
@@ -550,6 +587,20 @@ export function ShiftApplicationCalendar({
                   }}
                 />
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const index = getScheduleIndex(selectedDate!);
+                  if (index !== -1) {
+                    onCheckChange(index, true);
+                    onTimeChange(index, 'start_time', defaultShiftStart);
+                    onTimeChange(index, 'end_time', defaultShiftEnd);
+                  }
+                }}
+              >
+                終日勤務不可にする（{defaultShiftStart} - {defaultShiftEnd}）
+              </Button>
             </div>
           )}
 

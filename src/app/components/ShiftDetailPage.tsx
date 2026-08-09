@@ -706,6 +706,8 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                   desiredShiftsPerWeek={desiredShiftsPerWeek}
                   onDesiredShiftsChange={setDesiredShiftsPerWeek}
                   disabledDates={publishedDates}
+                  shiftStartTime={shift.start_time}
+                  shiftEndTime={shift.end_time}
                 />
                 <div className="flex gap-2">
                   <Button onClick={handleApply} disabled={applying} className="flex-1">{applying ? '応募中...' : '応募する'}</Button>
