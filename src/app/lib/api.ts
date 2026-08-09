@@ -780,7 +780,7 @@ export async function applyToShift(
   
   if (scheduleError) throw scheduleError;
   
-  return { application };
+  return { application: { id: applicationId } };
 }
 
 // シフト応募を承認（管理者のみ）
