@@ -27,6 +27,7 @@ interface ShiftApplicationCalendarProps {
   onTimeChange: (index: number, field: 'start_time' | 'end_time', value: string) => void;
   desiredShiftsPerWeek: number;
   onDesiredShiftsChange: (value: number) => void;
+  disabledDates?: string[];
 }
 
 export function ShiftApplicationCalendar({
@@ -35,6 +36,7 @@ export function ShiftApplicationCalendar({
   onTimeChange,
   desiredShiftsPerWeek,
   onDesiredShiftsChange,
+  disabledDates = [],
 }: ShiftApplicationCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(() => {
     if (dailySchedules.length > 0) {
@@ -111,6 +113,7 @@ export function ShiftApplicationCalendar({
 
     const index = getScheduleIndex(dateStr);
     if (index === -1) return; // シフト期間外
+    if (disabledDates.includes(dateStr)) return; // 発表済み日付は選択不可
 
     if (multiSelectMode) {
       // 複数選択モード：トグル選択
@@ -342,6 +345,7 @@ export function ShiftApplicationCalendar({
               
               const index = getScheduleIndex(dateStr);
               const isInRange = index !== -1;
+              const isDisabledByPublish = disabledDates.includes(dateStr);
               const schedule = isInRange ? dailySchedules[index] : null;
               const isSelected = schedule?.checked || false;
               const isMultiSelected = multiSelectedDates.has(dateStr);
@@ -350,13 +354,15 @@ export function ShiftApplicationCalendar({
               return (
                 <button
                   key={dateStr}
-                  onClick={() => isInRange && handleDateClick(date)}
-                  disabled={!isInRange}
+                  onClick={() => isInRange && !isDisabledByPublish && handleDateClick(date)}
+                  disabled={!isInRange || isDisabledByPublish}
                   className={`
                     aspect-square rounded-lg border-2 text-sm font-medium
                     transition-all duration-200 relative
                     ${!isInRange
                       ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
+                      : isDisabledByPublish
+                        ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
                       : isMultiSelected
                         ? 'bg-green-500 text-white border-green-600 hover:bg-green-600 shadow-md'
                         : isSelected
@@ -399,6 +405,10 @@ export function ShiftApplicationCalendar({
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded border-2 border-gray-200 bg-white"></div>
                 <span>未選択</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded border-2 border-amber-200 bg-amber-50"></div>
+                <span>発表済み（再提出不可）</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded border-2 border-gray-100 bg-gray-50"></div>

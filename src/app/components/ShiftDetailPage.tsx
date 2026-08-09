@@ -16,6 +16,7 @@ import {
   saveShiftRoles,
   unpublishShiftResults,
   unapproveShiftApplication,
+  getPublishedDates,
   type ApprovedSlot,
   type ApprovedSlotsMap,
   type ShiftRole,
@@ -129,6 +130,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const [showApplicationForm, setShowApplicationForm] = useState(false);
   const [dateApplications, setDateApplications] = useState<Record<string, ApplicationForDate[]>>({});
   const [publishingResults, setPublishingResults] = useState(false);
+  const [publishedDates, setPublishedDates] = useState<string[]>([]);
   const [desiredShiftsPerWeek, setDesiredShiftsPerWeek] = useState(3);
   const [groupMembers, setGroupMembers] = useState<Array<{ user_email: string; user_name: string }>>([]);
   const [approvedSlotsMap, setApprovedSlotsMap] = useState<ApprovedSlotsMap>({});
@@ -165,12 +167,33 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       const data = await getShiftDetail(shiftId);
       setDetail(data);
 
+      const loadedPublishedDates = await getPublishedDates(shiftId).catch(() => []);
+      setPublishedDates(loadedPublishedDates);
+
+      const currentUserEmail = localStorage.getItem('user_email') || '';
+      const currentUserApplication = data.applications.find((app) => app.user_email === currentUserEmail);
+      const lockedDateSet = new Set(loadedPublishedDates);
+      const userScheduleMap = new Map<string, DaySchedule>(
+        (currentUserApplication?.daily_schedule || []).map((day: DaySchedule) => [day.date, day] as const),
+      );
+
       const schedules = buildDateList(
         data.shift.start_date,
         data.shift.end_date,
         data.shift.start_time,
         data.shift.end_time,
-      );
+      ).map((item) => {
+        const userDay = userScheduleMap.get(item.date);
+        if (!userDay || lockedDateSet.has(item.date)) {
+          return item;
+        }
+        return {
+          ...item,
+          checked: true,
+          start_time: userDay.start_time,
+          end_time: userDay.end_time,
+        };
+      });
       setDailySchedules(schedules);
 
       if (data.is_admin) {
@@ -281,6 +304,11 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   };
 
   const handleApply = async () => {
+    if (detail?.shift.results_published) {
+      toast.error('結果発表中のため再提出できません');
+      return;
+    }
+
     const selectedSchedules = dailySchedules
       .filter((item) => item.checked)
       .map((item) => ({
@@ -288,6 +316,13 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         start_time: item.start_time,
         end_time: item.end_time,
       }));
+
+    const selectedDateSet = new Set(selectedSchedules.map((item) => item.date));
+    const blockedDates = publishedDates.filter((date) => selectedDateSet.has(date));
+    if (blockedDates.length > 0) {
+      toast.error('発表済みの日程は再提出できません');
+      return;
+    }
 
     if (selectedSchedules.length === 0) {
       toast.error('少なくとも1日以上選択してください');
@@ -592,13 +627,19 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
               <span className={isDeadlinePassed ? 'text-red-600 font-medium' : 'text-gray-700'}>{formatDateTime(shift.application_deadline)}</span>
             </div>
 
-            {!is_admin && !userApplication && !showApplicationForm && (
+            {!is_admin && shift.results_published && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                このシフトは結果発表中のため再提出できません。公開取り消し後、未発表の日程のみ再提出できます。
+              </div>
+            )}
+
+            {!is_admin && !showApplicationForm && !shift.results_published && (
               <Button onClick={() => setShowApplicationForm(true)} disabled={isDeadlinePassed} className="w-full">
-                {isDeadlinePassed ? '応募締切済み' : 'このシフトに応募する'}
+                {isDeadlinePassed ? '応募締切済み' : userApplication ? 'このシフトを再提出する' : 'このシフトに応募する'}
               </Button>
             )}
 
-            {!is_admin && showApplicationForm && (
+            {!is_admin && showApplicationForm && !shift.results_published && (
               <div className="border-t pt-4 space-y-3">
                 <h3 className="font-medium">カレンダーで就業可能日と時間を選択してください</h3>
                 <ShiftApplicationCalendar
@@ -607,6 +648,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                   onTimeChange={handleTimeChange}
                   desiredShiftsPerWeek={desiredShiftsPerWeek}
                   onDesiredShiftsChange={setDesiredShiftsPerWeek}
+                  disabledDates={publishedDates}
                 />
                 <div className="flex gap-2">
                   <Button onClick={handleApply} disabled={applying} className="flex-1">{applying ? '応募中...' : '応募する'}</Button>
@@ -628,7 +670,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                       appliedDays={userApplication.daily_schedule}
                       startDate={shift.start_date}
                       endDate={shift.end_date}
-                      publishedDates={shift.results_published ? null : []}
+                      publishedDates={shift.results_published ? null : publishedDates}
                       shiftId={shift.id}
                       userEmail={currentUserEmail}
                     />

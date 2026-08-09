@@ -683,38 +683,91 @@ export async function applyToShift(
 
   if (!userEmail) throw new Error('ログインが必要です');
 
-  // 既存の pending 応募があれば削除して上書き
+  // 全体発表中は再提出不可
+  const { data: shift, error: shiftError } = await supabase
+    .from('shifts')
+    .select('results_published')
+    .eq('id', shiftId)
+    .single();
+
+  if (shiftError || !shift) {
+    throw new Error('シフト情報の取得に失敗しました');
+  }
+
+  if (shift.results_published) {
+    throw new Error('結果発表中のため再提出できません');
+  }
+
+  // 日付別発表済みの日程は再提出不可
+  const publishedDates = await getPublishedDates(shiftId);
+  if (publishedDates.length > 0) {
+    const selectedDateSet = new Set(dailySchedule.map((item) => item.date));
+    const blockedDates = publishedDates.filter((date) => selectedDateSet.has(date));
+    if (blockedDates.length > 0) {
+      throw new Error(`発表済み日程が含まれているため提出できません: ${blockedDates.join(', ')}`);
+    }
+  }
+
+  // 既存応募があれば再提出として上書き
   const { data: existing } = await supabase
     .from('shift_applications')
     .select('id')
     .eq('shift_id', shiftId)
     .eq('user_email', userEmail)
-    .eq('status', 'pending')
     .maybeSingle();
 
+  let applicationId: number;
+
   if (existing) {
-    await supabase.from('daily_schedules').delete().eq('application_id', existing.id);
-    await supabase.from('shift_applications').delete().eq('id', existing.id);
+    const { error: scheduleDeleteError } = await supabase
+      .from('daily_schedules')
+      .delete()
+      .eq('application_id', existing.id);
+
+    if (scheduleDeleteError) throw scheduleDeleteError;
+
+    const { error: appUpdateError } = await supabase
+      .from('shift_applications')
+      .update({
+        user_name: userName || 'Unknown',
+        status: 'pending',
+        desired_shifts_per_week: desiredShiftsPerWeek || null,
+        applied_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id);
+
+    if (appUpdateError) throw appUpdateError;
+
+    // 以前の採用スロットが残ると表示が不整合になるためクリア
+    const approvedSlotsMap = await getApprovedSlotsMap(shiftId);
+    if (approvedSlotsMap[userEmail]) {
+      const nextMap = { ...approvedSlotsMap };
+      delete nextMap[userEmail];
+      await saveApprovedSlotsMap(shiftId, nextMap);
+    }
+
+    applicationId = existing.id;
+  } else {
+    // 応募レコードを作成
+    const { data: application, error: appError } = await supabase
+      .from('shift_applications')
+      .insert({
+        shift_id: shiftId,
+        user_email: userEmail,
+        user_name: userName || 'Unknown',
+        status: 'pending',
+        desired_shifts_per_week: desiredShiftsPerWeek || null,
+      })
+      .select()
+      .single();
+
+    if (appError) throw appError;
+    applicationId = application.id;
   }
-
-  // 応募レコードを作成
-  const { data: application, error: appError } = await supabase
-    .from('shift_applications')
-    .insert({
-      shift_id: shiftId,
-      user_email: userEmail,
-      user_name: userName || 'Unknown',
-      status: 'pending',
-      desired_shifts_per_week: desiredShiftsPerWeek || null,
-    })
-    .select()
-    .single();
-
-  if (appError) throw appError;
   
   // 日別スケジュールを登録
   const schedules = dailySchedule.map(schedule => ({
-    application_id: application.id,
+    application_id: applicationId,
     date: schedule.date,
     start_time: schedule.start_time,
     end_time: schedule.end_time,
