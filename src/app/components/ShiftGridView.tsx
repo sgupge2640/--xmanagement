@@ -45,6 +45,13 @@ interface ShiftGridViewProps {
   roles?: ShiftRole[];
   onApproveSlot?: (appId: number, date: string, startTime: string, endTime: string, slots?: ApprovedSlot[]) => Promise<void>;
   onUnapproveSlot?: (appId: number, date: string, slotStart?: string, slotEnd?: string) => Promise<void>;
+  onDirectHireSlot?: (params: {
+    userEmail: string;
+    userName: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+  }) => Promise<void>;
   onToggleDatePublish?: (date: string) => void;
 }
 
@@ -236,6 +243,7 @@ export function ShiftGridView({
   roles = [],
   onApproveSlot,
   onUnapproveSlot,
+  onDirectHireSlot,
   onToggleDatePublish,
 }: ShiftGridViewProps) {
   // 採用済みセルのポップオーバー（ロール変更・取り消し用）
@@ -244,6 +252,7 @@ export function ShiftGridView({
     slotStart: string; slotEnd: string;
     slotKey?: string;
     currentRoleId?: string;
+    isUnapplied?: boolean;
     x: number; y: number;
   } | null>(null);
   const [approving, setApproving] = useState(false);
@@ -262,24 +271,16 @@ export function ShiftGridView({
     : [{ start: shiftStartTime.slice(0, 5), end: shiftEndTime.slice(0, 5), name: '' }];
   const displaySlotLabel = (slot: Slot) => slot.name || `${slot.start.slice(0, 5)}-${slot.end.slice(0, 5)}`;
 
-  // 応募している全メンバーを抽出（グループメンバー + 応募者）
-  const allApplicantEmails = useMemo(() => {
-    const emails = new Set<string>();
-    Object.values(filteredDateApplications).forEach(apps =>
-      apps.forEach(app => emails.add(app.user_email))
-    );
-    return emails;
-  }, [filteredDateApplications]);
-
   const members = useMemo(() => {
     const seen = new Set<string>();
     const result: { user_email: string; user_name: string }[] = [];
+    // グループメンバーを全員表示（未応募者も含む）
     groupMembers.forEach(m => {
-      if (allApplicantEmails.has(m.user_email)) {
-        seen.add(m.user_email);
-        result.push(m);
-      }
+      seen.add(m.user_email);
+      result.push(m);
     });
+
+    // 応募データにのみ存在するメンバーがいれば追加
     Object.values(filteredDateApplications).forEach(apps => {
       apps.forEach(app => {
         if (!seen.has(app.user_email)) {
@@ -289,7 +290,7 @@ export function ShiftGridView({
       });
     });
     return result;
-  }, [groupMembers, filteredDateApplications, allApplicantEmails]);
+  }, [groupMembers, filteredDateApplications]);
 
   useEffect(() => {
     setOrderedMembers((current) => {
@@ -328,6 +329,9 @@ export function ShiftGridView({
     slots.forEach(slot => {
       const key = `${date}__${slot.name || slot.start}`;
       wishCounts[key] = apps.filter(app => {
+        if (app.day_status === 'direct_approved') {
+          return false;
+        }
         const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
         return overlaps(wt.start, wt.end, slot.start, slot.end);
       }).length;
@@ -832,27 +836,29 @@ export function ShiftGridView({
                 const kvSlots = approvedSlotsMap[member.user_email]?.[date];
 
                 return slots.map((slot, slotIndex) => {
-                  let cellState: 'none' | 'wish' | 'approved' = 'none';
-                  if (app) {
+                  let wishOverlap = false;
+                  if (app && app.day_status !== 'direct_approved') {
                     const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
-                    const wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
-                    if (wishOverlap) {
-                      cellState = 'wish';
-                      // 新しい採用方式: KVスロットを優先し、無い場合だけ従来DB時間をフォールバック
-                      if (kvSlots && kvSlots.length > 0) {
-                        if (kvSlots.some(ks => overlaps(ks.start, ks.end, slot.start, slot.end))) {
-                          cellState = 'approved';
-                        }
-                      } else {
-                        const isApprovedStatus = app.day_status === 'approved' || app.day_status === 'direct_approved';
-                        if (isApprovedStatus && overlaps(app.start_time, app.end_time, slot.start, slot.end)) {
-                          cellState = 'approved';
-                        }
-                      }
-                    }
+                    wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
                   }
 
-                  const isClickable = isAdmin && onApproveSlot && app && (cellState === 'wish' || cellState === 'approved');
+                  const approvedByKv = !!kvSlots?.some(ks => overlaps(ks.start, ks.end, slot.start, slot.end));
+                  const approvedByDb = !!app
+                    && (app.day_status === 'approved' || app.day_status === 'direct_approved')
+                    && overlaps(app.start_time, app.end_time, slot.start, slot.end);
+
+                  const isUnappliedCell = !wishOverlap;
+                  let cellState: 'none' | 'wish' | 'approved' = 'none';
+                  if (approvedByKv || approvedByDb) {
+                    cellState = 'approved';
+                  } else if (wishOverlap) {
+                    cellState = 'wish';
+                  }
+
+                  const canOperate = isAdmin && mode === 'result';
+                  const canApproveExisting = !!canOperate && !!onApproveSlot && !!app;
+                  const canDirectHire = !!canOperate && !!onDirectHireSlot && !app;
+                  const isClickable = !approving && (canApproveExisting || canDirectHire);
 
                   // 採用済みセルのロール色を取得
                   const matchingKvSlot = cellState === 'approved' && kvSlots
@@ -872,22 +878,48 @@ export function ShiftGridView({
                     ? { backgroundColor: cellRole.color }
                     : {};
 
-                  const handleClick = (e: React.MouseEvent) => {
-                    if (!isClickable || !app || approving) return;
-                    if (cellState === 'approved') {
+                  const handleClick = async (e: React.MouseEvent) => {
+                    if (!isClickable || approving) return;
+
+                    if (app && cellState === 'approved') {
                       // 採用済み → ポップオーバー表示（ロール変更・取り消し）
                       setRolePopover({
                         appId: app.id, date, memberName: app.user_name,
                         slotStart: slot.start, slotEnd: slot.end,
                         slotKey: matchingKvSlot?.slotKey ?? `idx:${slotIndex}`,
                         currentRoleId: matchingKvSlot?.roleId,
+                        isUnapplied: isUnappliedCell,
                         x: e.clientX, y: e.clientY,
                       });
                       return;
                     }
-                    // 勤務可能 → 即時採用
-                    const existKvSlots = kvSlots ?? [];
-                    handleInstantApprove(app.id, date, slot.start, slot.end, existKvSlots, `idx:${slotIndex}`);
+
+                    if (app && onApproveSlot) {
+                      const confirmed = window.confirm(
+                        isUnappliedCell
+                          ? `${app.user_name}さんの未応募枠（${date} ${slot.start}〜${slot.end}）を採用しますか？`
+                          : `${app.user_name}さんの勤務可能枠（${date} ${slot.start}〜${slot.end}）を採用しますか？`,
+                      );
+                      if (!confirmed) return;
+
+                      const existKvSlots = kvSlots ?? [];
+                      await handleInstantApprove(app.id, date, slot.start, slot.end, existKvSlots, `idx:${slotIndex}`);
+                      return;
+                    }
+
+                    if (onDirectHireSlot) {
+                      const confirmed = window.confirm(
+                        `${member.user_name}さんはこの日付に応募していません。\n未応募枠（${date} ${slot.start}〜${slot.end}）として採用しますか？`,
+                      );
+                      if (!confirmed) return;
+                      await onDirectHireSlot({
+                        userEmail: member.user_email,
+                        userName: member.user_name,
+                        date,
+                        startTime: slot.start,
+                        endTime: slot.end,
+                      });
+                    }
                   };
 
                   return (
@@ -899,12 +931,16 @@ export function ShiftGridView({
                       style={bgStyle}
                       title={
                         cellState === 'approved'
-                          ? `採用済み${cellRole ? `（${cellRole.name}）` : ''}: ${(matchingKvSlot?.start ?? app!.start_time).slice(0,5)}〜${(matchingKvSlot?.end ?? app!.end_time).slice(0,5)}${isClickable ? '（クリックで取り消し）' : ''}`
+                          ? `${isUnappliedCell ? '未応募採用' : '採用済み'}${cellRole ? `（${cellRole.name}）` : ''}: ${(matchingKvSlot?.start ?? app!.start_time).slice(0,5)}〜${(matchingKvSlot?.end ?? app!.end_time).slice(0,5)}${isClickable ? '（クリックでロール変更・取り消し）' : ''}`
                           : cellState === 'wish'
                           ? `勤務可能: ${(wishTimesMap[app!.user_email]?.[date]?.start ?? app!.original_start_time).slice(0,5)}〜${(wishTimesMap[app!.user_email]?.[date]?.end ?? app!.original_end_time).slice(0,5)}${isClickable ? '（クリックで採用）' : ''}`
-                          : ''
+                          : app
+                          ? `未応募枠（応募時間外）${isClickable ? '（クリックで採用）' : ''}`
+                          : `未応募（応募データなし）${isClickable ? '（クリックで採用）' : ''}`
                       }
-                      onClick={handleClick}
+                      onClick={(e) => {
+                        void handleClick(e);
+                      }}
                     >
                       <div className="h-8 w-full" />
                     </td>
@@ -984,6 +1020,12 @@ export function ShiftGridView({
           <div className="w-5 h-5 border border-gray-400 bg-gray-300 rounded" />
           <span>希望なし</span>
         </div>
+        {isAdmin && mode === 'result' && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 border border-gray-400 bg-gray-300 rounded" />
+            <span>未応募枠（クリックで採用）</span>
+          </div>
+        )}
       </div>
 
       {/* ロール凡例 */}
@@ -1024,6 +1066,11 @@ export function ShiftGridView({
             <div className="text-xs font-medium text-gray-700 mb-2">
               {rolePopover.memberName} — {rolePopover.slotStart}〜{rolePopover.slotEnd}
             </div>
+            {rolePopover.isUnapplied && (
+              <div className="text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1 mb-2">
+                未応募枠として採用されています
+              </div>
+            )}
             {roles.length > 0 && (
               <div className="mb-2">
                 <div className="text-xs text-gray-400 mb-1.5">採用内容を変更</div>
@@ -1049,7 +1096,15 @@ export function ShiftGridView({
               </div>
             )}
             <button
-              onClick={() => handleInstantUnapprove(rolePopover.appId, rolePopover.date, rolePopover.slotStart, rolePopover.slotEnd)}
+              onClick={() => {
+                const confirmed = window.confirm(
+                  rolePopover.isUnapplied
+                    ? '未応募枠の採用を取り消しますか？\n取り消すと未応募の状態に戻ります。'
+                    : 'この採用を取り消しますか？',
+                );
+                if (!confirmed) return;
+                void handleInstantUnapprove(rolePopover.appId, rolePopover.date, rolePopover.slotStart, rolePopover.slotEnd);
+              }}
               disabled={approving}
               className="w-full text-left px-2 py-1 rounded text-xs text-red-600 hover:bg-red-50 border-t border-gray-100 mt-1 pt-2"
             >

@@ -16,6 +16,8 @@ import {
   saveShiftRoles,
   unpublishShiftResults,
   unapproveShiftApplication,
+  directHireMember,
+  cancelDirectHire,
   getPublishedDates,
   type ApprovedSlot,
   type ApprovedSlotsMap,
@@ -452,14 +454,20 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     return map;
   }, [dateApplications]);
 
-  const updateApplicationDayStatus = (appId: number, date: string, isApproved: boolean) => {
+  const updateApplicationDayStatus = (
+    appId: number,
+    date: string,
+    isApproved: boolean,
+    nextDayStatus?: 'approved' | 'pending' | 'direct_approved',
+  ) => {
+    const dayStatus = nextDayStatus ?? (isApproved ? 'approved' : 'pending');
     setDateApplications((current) => ({
       ...current,
       [date]: (current[date] || []).map((item) =>
         item.id === appId
           ? {
               ...item,
-              day_status: isApproved ? 'approved' : 'pending',
+              day_status: dayStatus,
               status: isApproved ? 'approved' : 'pending',
             }
           : item,
@@ -476,20 +484,24 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   ) => {
     const app = (dateApplications[date] || []).find((item) => item.id === appId);
     if (!app) return;
+    const isDirectApproved = app.day_status === 'direct_approved';
 
     const nextMap: ApprovedSlotsMap = { ...approvedSlotsMap };
     nextMap[app.user_email] = { ...(nextMap[app.user_email] || {}) };
     nextMap[app.user_email][date] = slots || [{ start: startTime, end: endTime }];
 
-    await approveShiftApplication(appId, [{ date }]);
+    if (!isDirectApproved) {
+      await approveShiftApplication(appId, [{ date }]);
+    }
     await saveApprovedSlotsMap(shiftId, nextMap);
     setApprovedSlotsMap(nextMap);
-    updateApplicationDayStatus(appId, date, true);
+    updateApplicationDayStatus(appId, date, true, isDirectApproved ? 'direct_approved' : 'approved');
   };
 
   const handleUnapproveSlot = async (appId: number, date: string, slotStart?: string, slotEnd?: string) => {
     const app = (dateApplications[date] || []).find((item) => item.id === appId);
     if (!app) return;
+    const isDirectApproved = app.day_status === 'direct_approved';
 
     const nextMap: ApprovedSlotsMap = { ...approvedSlotsMap };
     const userDateSlots = [...(nextMap[app.user_email]?.[date] || [])];
@@ -505,8 +517,10 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       nextMap[app.user_email] = { ...(nextMap[app.user_email] || {}), [date]: remainingSlots };
       await saveApprovedSlotsMap(shiftId, nextMap);
       setApprovedSlotsMap(nextMap);
-      await approveShiftApplication(appId, [{ date }]);
-      updateApplicationDayStatus(appId, date, true);
+      if (!isDirectApproved) {
+        await approveShiftApplication(appId, [{ date }]);
+      }
+      updateApplicationDayStatus(appId, date, true, isDirectApproved ? 'direct_approved' : 'approved');
       return;
     }
 
@@ -520,8 +534,33 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
     await saveApprovedSlotsMap(shiftId, nextMap);
     setApprovedSlotsMap(nextMap);
+
+    if (isDirectApproved) {
+      await cancelDirectHire(appId, date);
+      await loadDetail();
+      return;
+    }
+
     await unapproveShiftApplication(appId, [date]);
     updateApplicationDayStatus(appId, date, false);
+  };
+
+  const handleDirectApproveSlot = async ({
+    userEmail,
+    userName,
+    date,
+    startTime,
+    endTime,
+  }: {
+    userEmail: string;
+    userName: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+  }) => {
+    await directHireMember(shiftId, date, userEmail, userName, startTime, endTime);
+    toast.success('未応募枠を採用しました');
+    await loadDetail();
   };
 
   const handleAddBreakpoint = () => {
@@ -986,6 +1025,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                     isAdmin={true}
                     onApproveSlot={handleApproveSlot}
                     onUnapproveSlot={handleUnapproveSlot}
+                    onDirectHireSlot={handleDirectApproveSlot}
                   />
                 </div>
             </CardContent>
