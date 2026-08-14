@@ -842,10 +842,12 @@ export function ShiftGridView({
                     wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
                   }
 
+                  const hasKvSlots = !!kvSlots && kvSlots.length > 0;
                   const approvedByKv = !!kvSlots?.some(ks => overlaps(ks.start, ks.end, slot.start, slot.end));
-                  const approvedByDb = !!app
-                    && (app.day_status === 'approved' || app.day_status === 'direct_approved')
-                    && overlaps(app.start_time, app.end_time, slot.start, slot.end);
+                  const approvedByDb = !hasKvSlots && !!app && (
+                    (app.day_status === 'direct_approved' && overlaps(app.start_time, app.end_time, slot.start, slot.end))
+                    || (app.day_status === 'approved' && wishOverlap && overlaps(app.start_time, app.end_time, slot.start, slot.end))
+                  );
 
                   const isUnappliedCell = !wishOverlap;
                   let cellState: 'none' | 'wish' | 'approved' = 'none';
@@ -865,16 +867,19 @@ export function ShiftGridView({
                     ? kvSlots.find(ks => overlaps(ks.start, ks.end, slot.start, slot.end))
                     : undefined;
                   const cellRole = matchingKvSlot?.roleId ? roles.find(r => r.id === matchingKvSlot.roleId) : undefined;
+                  const isUnappliedApproved = cellState === 'approved' && isUnappliedCell;
 
                   const bgClass =
-                    cellState === 'approved' && !cellRole
+                    isUnappliedApproved
+                      ? 'bg-sky-300'
+                      : cellState === 'approved' && !cellRole
                       ? 'bg-green-300'
                       : cellState === 'wish'
                       ? 'bg-amber-200'
                       : cellState === 'none'
                       ? 'bg-gray-200'
                       : '';
-                  const bgStyle = cellState === 'approved' && cellRole
+                  const bgStyle = cellState === 'approved' && cellRole && !isUnappliedApproved
                     ? { backgroundColor: cellRole.color }
                     : {};
 
@@ -895,23 +900,12 @@ export function ShiftGridView({
                     }
 
                     if (app && onApproveSlot) {
-                      const confirmed = window.confirm(
-                        isUnappliedCell
-                          ? `${app.user_name}さんの未応募枠（${date} ${slot.start}〜${slot.end}）を採用しますか？`
-                          : `${app.user_name}さんの勤務可能枠（${date} ${slot.start}〜${slot.end}）を採用しますか？`,
-                      );
-                      if (!confirmed) return;
-
                       const existKvSlots = kvSlots ?? [];
                       await handleInstantApprove(app.id, date, slot.start, slot.end, existKvSlots, `idx:${slotIndex}`);
                       return;
                     }
 
                     if (onDirectHireSlot) {
-                      const confirmed = window.confirm(
-                        `${member.user_name}さんはこの日付に応募していません。\n未応募枠（${date} ${slot.start}〜${slot.end}）として採用しますか？`,
-                      );
-                      if (!confirmed) return;
                       await onDirectHireSlot({
                         userEmail: member.user_email,
                         userName: member.user_name,
@@ -1010,6 +1004,10 @@ export function ShiftGridView({
           <div className="w-5 h-5 border border-gray-400 bg-green-300 rounded" />
           <span>採用済み{isAdmin && onApproveSlot ? '（クリックでロール変更・取り消し）' : ''}</span>
         </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-5 h-5 border border-gray-400 bg-sky-300 rounded" />
+          <span>未応募から採用</span>
+        </div>
         {isAdmin && onApproveSlot && (
           <div className="flex items-center gap-1.5">
             <div className="w-5 h-5 border border-gray-400 bg-amber-200 rounded" />
@@ -1097,12 +1095,6 @@ export function ShiftGridView({
             )}
             <button
               onClick={() => {
-                const confirmed = window.confirm(
-                  rolePopover.isUnapplied
-                    ? '未応募枠の採用を取り消しますか？\n取り消すと未応募の状態に戻ります。'
-                    : 'この採用を取り消しますか？',
-                );
-                if (!confirmed) return;
                 void handleInstantUnapprove(rolePopover.appId, rolePopover.date, rolePopover.slotStart, rolePopover.slotEnd);
               }}
               disabled={approving}
