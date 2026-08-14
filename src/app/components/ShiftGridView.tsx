@@ -856,7 +856,9 @@ export function ShiftGridView({
                   let wishOverlap = false;
                   if (app) {
                     const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
-                    if (app.day_status === 'direct_approved' && isAdminMember) {
+                    if (isAdminMember) {
+                      wishOverlap = true;
+                    } else if (app.day_status === 'direct_approved') {
                       wishOverlap = overlaps(app.start_time, app.end_time, slot.start, slot.end);
                     } else if (app.day_status !== 'direct_approved') {
                       wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
@@ -873,7 +875,7 @@ export function ShiftGridView({
                     || (app.day_status === 'approved' && wishOverlap && overlaps(app.start_time, app.end_time, slot.start, slot.end))
                   );
 
-                  const isUnappliedCell = !wishOverlap;
+                  const isUnappliedCell = isAdminMember ? false : !wishOverlap;
                   let cellState: 'none' | 'wish' | 'approved' = 'none';
                   if (approvedByKv || approvedByDb) {
                     cellState = 'approved';
@@ -882,8 +884,8 @@ export function ShiftGridView({
                   }
 
                   const canOperate = isAdmin && mode === 'result';
-                  const canApproveExisting = !!canOperate && !!onApproveSlot && !!app && !isUnappliedCell;
-                  const canDirectHireAdmin = !!canOperate && !!onDirectHireSlot && !app && isAdminMember;
+                  const canApproveExisting = !!canOperate && !!onApproveSlot && !!app && !isAdminMember && !isUnappliedCell;
+                  const canDirectHireAdmin = !!canOperate && !!onDirectHireSlot && isAdminMember && cellState !== 'approved';
                   const canDirectHire = !!canOperate && !!onDirectHireSlot && isUnappliedCell;
                   const isClickable = !approving && (canApproveExisting || canDirectHire || canDirectHireAdmin);
 
@@ -915,7 +917,7 @@ export function ShiftGridView({
                   const handleClick = async (e: React.MouseEvent) => {
                     if (!isClickable || approving) return;
 
-                    if (!app && isAdminMember && onDirectHireSlot) {
+                    if (isAdminMember && cellState !== 'approved' && onDirectHireSlot) {
                       await onDirectHireSlot({
                         userEmail: member.user_email,
                         userName: member.user_name,
