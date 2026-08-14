@@ -55,6 +55,10 @@ interface ShiftGridViewProps {
   onToggleDatePublish?: (date: string) => void;
 }
 
+function normalizeEmail(email: string | undefined | null) {
+  return (email || '').trim().toLowerCase();
+}
+
 const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 
 function toMinutes(t: string) {
@@ -276,15 +280,22 @@ export function ShiftGridView({
     const result: { user_email: string; user_name: string }[] = [];
     // グループメンバーを全員表示（未応募者も含む）
     groupMembers.forEach(m => {
-      seen.add(m.user_email);
-      result.push(m);
+      const key = normalizeEmail(m.user_email);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      result.push({
+        user_email: m.user_email,
+        user_name: m.user_name || m.user_email,
+      });
     });
 
     // 応募データにのみ存在するメンバーがいれば追加
     Object.values(filteredDateApplications).forEach(apps => {
       apps.forEach(app => {
-        if (!seen.has(app.user_email)) {
-          seen.add(app.user_email);
+        const key = normalizeEmail(app.user_email);
+        if (!key) return;
+        if (!seen.has(key)) {
+          seen.add(key);
           result.push({ user_email: app.user_email, user_name: app.user_name });
         }
       });
@@ -304,9 +315,11 @@ export function ShiftGridView({
 
   const moveMember = (fromEmail: string, toEmail: string) => {
     if (fromEmail === toEmail) return;
+    const fromKey = normalizeEmail(fromEmail);
+    const toKey = normalizeEmail(toEmail);
     setOrderedMembers((current) => {
-      const sourceIndex = current.findIndex((member) => member.user_email === fromEmail);
-      const targetIndex = current.findIndex((member) => member.user_email === toEmail);
+      const sourceIndex = current.findIndex((member) => normalizeEmail(member.user_email) === fromKey);
+      const targetIndex = current.findIndex((member) => normalizeEmail(member.user_email) === toKey);
       if (sourceIndex === -1 || targetIndex === -1) return current;
       const next = [...current];
       const [moved] = next.splice(sourceIndex, 1);
@@ -803,7 +816,7 @@ export function ShiftGridView({
         <tbody>
           {displayMembers.map(member => (
             <tr
-              key={member.user_email}
+              key={normalizeEmail(member.user_email) || member.user_name}
               className={`hover:bg-gray-50 ${draggingEmail === member.user_email ? 'opacity-50' : ''}`}
               onDragOver={(e) => {
                 if (!isAdmin || mode !== 'result') return;
@@ -831,9 +844,11 @@ export function ShiftGridView({
               </td>
               {dailySchedules.map(({ date }) => {
                 const apps = filteredDateApplications[date] || [];
-                const app = apps.find(a => a.user_email === member.user_email);
+                const memberEmailKey = normalizeEmail(member.user_email);
+                const app = apps.find(a => normalizeEmail(a.user_email) === memberEmailKey);
                 // KVに保存されたスロット一覧（グリッドから採用した場合）
-                const kvSlots = approvedSlotsMap[member.user_email]?.[date];
+                const kvSlots = approvedSlotsMap[member.user_email]?.[date]
+                  ?? approvedSlotsMap[memberEmailKey]?.[date];
 
                 return slots.map((slot, slotIndex) => {
                   let wishOverlap = false;
@@ -901,9 +916,11 @@ export function ShiftGridView({
 
                     // 未応募枠（応募データなし / 応募時間外）は direct hire で扱う
                     if (isUnappliedCell && onDirectHireSlot) {
+                      const targetEmail = app?.user_email || member.user_email;
+                      if (!normalizeEmail(targetEmail)) return;
                       await onDirectHireSlot({
-                        userEmail: member.user_email,
-                        userName: member.user_name,
+                        userEmail: targetEmail,
+                        userName: app?.user_name || member.user_name,
                         date,
                         startTime: slot.start,
                         endTime: slot.end,

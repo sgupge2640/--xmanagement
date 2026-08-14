@@ -558,7 +558,11 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     startTime: string;
     endTime: string;
   }) => {
-    await directHireMember(shiftId, date, userEmail, userName, startTime, endTime);
+    if (!userEmail?.trim()) {
+      toast.error('対象ユーザーのメールアドレスを特定できませんでした');
+      return;
+    }
+    await directHireMember(shiftId, date, userEmail.trim(), userName, startTime, endTime);
     toast.success('未応募枠を採用しました');
     await loadDetail();
   };
