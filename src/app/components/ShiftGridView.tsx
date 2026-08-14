@@ -858,8 +858,8 @@ export function ShiftGridView({
                   }
 
                   const canOperate = isAdmin && mode === 'result';
-                  const canApproveExisting = !!canOperate && !!onApproveSlot && !!app;
-                  const canDirectHire = !!canOperate && !!onDirectHireSlot && !app;
+                  const canApproveExisting = !!canOperate && !!onApproveSlot && !!app && !isUnappliedCell;
+                  const canDirectHire = !!canOperate && !!onDirectHireSlot && isUnappliedCell;
                   const isClickable = !approving && (canApproveExisting || canDirectHire);
 
                   // 採用済みセルのロール色を取得
@@ -899,13 +899,8 @@ export function ShiftGridView({
                       return;
                     }
 
-                    if (app && onApproveSlot) {
-                      const existKvSlots = kvSlots ?? [];
-                      await handleInstantApprove(app.id, date, slot.start, slot.end, existKvSlots, `idx:${slotIndex}`);
-                      return;
-                    }
-
-                    if (onDirectHireSlot) {
+                    // 未応募枠（応募データなし / 応募時間外）は direct hire で扱う
+                    if (isUnappliedCell && onDirectHireSlot) {
                       await onDirectHireSlot({
                         userEmail: member.user_email,
                         userName: member.user_name,
@@ -913,6 +908,12 @@ export function ShiftGridView({
                         startTime: slot.start,
                         endTime: slot.end,
                       });
+                      return;
+                    }
+
+                    if (app && onApproveSlot) {
+                      const existKvSlots = kvSlots ?? [];
+                      await handleInstantApprove(app.id, date, slot.start, slot.end, existKvSlots, `idx:${slotIndex}`);
                     }
                   };
 
