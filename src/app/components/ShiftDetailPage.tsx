@@ -93,6 +93,7 @@ interface ApplicationForDate {
   original_start_time: string;
   original_end_time: string;
   desired_shifts_per_week?: number;
+  synthetic?: boolean;
   selected: boolean;
 }
 
@@ -241,14 +242,13 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                 original_start_time: day.start_time,
                 original_end_time: day.end_time,
                 desired_shifts_per_week: application.desired_shifts_per_week,
+                synthetic: false,
                 selected: false,
               });
             });
             return;
           }
         });
-
-        setDateApplications(grouped);
 
         const targetGroupId = groupId ?? data.shift.group_id;
         try {
@@ -258,20 +258,51 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
             getShiftRoles(shiftId),
             getShiftBreakpoints(shiftId),
           ]);
-          setGroupMembers(
-            (membersData.members || [])
-              .filter((member: any) => member?.user_email && member.role !== 'admin')
-              .map((member: any) => ({
-                user_email: member.user_email,
-                user_name: member.user_name || member.user_email,
-              })),
-          );
+
+          const allMembers = (membersData.members || [])
+            .filter((member: any) => member?.user_email)
+            .map((member: any) => ({
+              user_email: member.user_email,
+              user_name: member.user_name || member.user_email,
+              role: member.role,
+            }));
+
+          const adminMembers = allMembers.filter((member: any) => member.role === 'admin');
+          const syntheticBaseId = -1000000000;
+
+          schedules.forEach((schedule, scheduleIndex) => {
+            if (!grouped[schedule.date]) grouped[schedule.date] = [];
+            adminMembers.forEach((admin, adminIndex) => {
+              const exists = grouped[schedule.date].some(
+                (item) => item.user_email.toLowerCase() === admin.user_email.toLowerCase(),
+              );
+              if (exists) return;
+              grouped[schedule.date].push({
+                id: syntheticBaseId + scheduleIndex * 1000 + adminIndex,
+                user_name: admin.user_name,
+                user_email: admin.user_email,
+                status: 'approved',
+                day_status: 'approved',
+                overall_status: 'approved',
+                start_time: schedule.start_time,
+                end_time: schedule.end_time,
+                original_start_time: schedule.start_time,
+                original_end_time: schedule.end_time,
+                synthetic: true,
+                selected: false,
+              });
+            });
+          });
+
+          setDateApplications(grouped);
+          setGroupMembers(allMembers);
           setApprovedSlotsMap(slotsMap || {});
           setRoles(shiftRoles || []);
           const nextBreakpoints = ((breakpoints || []) as CustomBreakpoint[])
             .sort((a, b) => a.start.localeCompare(b.start));
           setCustomBreakpoints(nextBreakpoints);
         } catch {
+          setDateApplications(grouped);
           setGroupMembers([]);
           setCustomBreakpoints([]);
         }

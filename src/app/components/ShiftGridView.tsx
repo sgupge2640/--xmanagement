@@ -16,6 +16,7 @@ interface ApplicationWithTime {
   start_time: string;
   end_time: string;
   day_status: string;
+  synthetic?: boolean;
 }
 
 interface Slot {
@@ -873,7 +874,7 @@ export function ShiftGridView({
                   }
 
                   const canOperate = isAdmin && mode === 'result';
-                  const canApproveExisting = !!canOperate && !!onApproveSlot && !!app && !isUnappliedCell;
+                  const canApproveExisting = !!canOperate && !!onApproveSlot && !!app && !app.synthetic && !isUnappliedCell;
                   const canDirectHire = !!canOperate && !!onDirectHireSlot && isUnappliedCell;
                   const isClickable = !approving && (canApproveExisting || canDirectHire);
 
