@@ -164,9 +164,11 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     return h * 60 + m;
   };
 
-  const loadDetail = async () => {
+  const loadDetail = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       const data = await getShiftDetail(shiftId);
       setDetail(data);
 
@@ -277,7 +279,9 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     } catch (error: any) {
       toast.error(error.message || 'シフト情報の取得に失敗しました');
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -527,7 +531,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
     if (isDirectApproved) {
       await cancelDirectHire(appId, date);
-      await loadDetail();
+      await loadDetail(false);
       return;
     }
 
@@ -554,7 +558,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     }
     await directHireMember(shiftId, date, userEmail.trim(), userName, startTime, endTime);
     toast.success('未応募枠を採用しました');
-    await loadDetail();
+    await loadDetail(false);
   };
 
   const handleAddBreakpoint = () => {
