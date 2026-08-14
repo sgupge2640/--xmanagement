@@ -886,8 +886,9 @@ export function ShiftGridView({
                   const canOperate = isAdmin && mode === 'result';
                   const canApproveExisting = !!canOperate && !!onApproveSlot && !!app && !isAdminMember && !isUnappliedCell;
                   const canDirectHireAdmin = !!canOperate && !!onDirectHireSlot && isAdminMember && cellState !== 'approved';
+                  const canOpenAdminApproved = !!canOperate && !!onUnapproveSlot && isAdminMember && !!app && cellState === 'approved';
                   const canDirectHire = !!canOperate && !!onDirectHireSlot && isUnappliedCell;
-                  const isClickable = !approving && (canApproveExisting || canDirectHire || canDirectHireAdmin);
+                  const isClickable = !approving && (canApproveExisting || canDirectHire || canDirectHireAdmin || canOpenAdminApproved);
 
                   // 採用済みセルのロール色を取得
                   const matchingKvSlot = cellState === 'approved' && kvSlots
