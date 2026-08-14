@@ -139,8 +139,3 @@ vercel.json
 - 原因: Node.js バージョン不一致
 - 対応: Node.js 20 以上を使用
 
-## 参考
-
-- Figma 元デザイン:
-  https://www.figma.com/design/4EbeoHzCTTByCVFoEO0ejV/%E3%82%A2%E3%83%97%E3%83%AA%E3%82%B3%E3%83%B3%E3%83%86%E3%82%B9%E3%83%88
-  
