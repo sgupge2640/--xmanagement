@@ -136,7 +136,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const [publishingResults, setPublishingResults] = useState(false);
   const [publishedDates, setPublishedDates] = useState<string[]>([]);
   const [desiredShiftsPerWeek, setDesiredShiftsPerWeek] = useState(3);
-  const [groupMembers, setGroupMembers] = useState<Array<{ user_email: string; user_name: string }>>([]);
+  const [groupMembers, setGroupMembers] = useState<Array<{ user_email: string; user_name: string; role?: string }>>([]);
   const [approvedSlotsMap, setApprovedSlotsMap] = useState<ApprovedSlotsMap>({});
   const [roles, setRoles] = useState<ShiftRole[]>([]);
   const [newRoleName, setNewRoleName] = useState('');

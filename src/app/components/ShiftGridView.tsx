@@ -34,7 +34,7 @@ interface ShiftGridViewProps {
   mode: 'wish' | 'result';
   dailySchedules: DailySchedule[];
   dateApplications: { [date: string]: ApplicationWithTime[] };
-  groupMembers: { user_email: string; user_name: string }[];
+  groupMembers: { user_email: string; user_name: string; role?: string }[];
   customBreakpoints: Slot[];
   shiftStartTime: string;
   shiftEndTime: string;
@@ -261,7 +261,7 @@ export function ShiftGridView({
     x: number; y: number;
   } | null>(null);
   const [approving, setApproving] = useState(false);
-  const [orderedMembers, setOrderedMembers] = useState<{ user_email: string; user_name: string }[]>([]);
+  const [orderedMembers, setOrderedMembers] = useState<{ user_email: string; user_name: string; role?: string }[]>([]);
   const [draggingEmail, setDraggingEmail] = useState<string | null>(null);
   // 非表示の応募を除外したデータ
   const filteredDateApplications = useMemo(() => {
@@ -278,7 +278,7 @@ export function ShiftGridView({
 
   const members = useMemo(() => {
     const seen = new Set<string>();
-    const result: { user_email: string; user_name: string }[] = [];
+    const result: { user_email: string; user_name: string; role?: string }[] = [];
     // グループメンバーを全員表示（未応募者も含む）
     groupMembers.forEach(m => {
       const key = normalizeEmail(m.user_email);
@@ -287,6 +287,7 @@ export function ShiftGridView({
       result.push({
         user_email: m.user_email,
         user_name: m.user_name || m.user_email,
+        role: m.role,
       });
     });
 
@@ -847,15 +848,20 @@ export function ShiftGridView({
                 const apps = filteredDateApplications[date] || [];
                 const memberEmailKey = normalizeEmail(member.user_email);
                 const app = apps.find(a => normalizeEmail(a.user_email) === memberEmailKey);
+                const isAdminMember = member.role === 'admin';
                 // KVに保存されたスロット一覧（グリッドから採用した場合）
                 const kvSlots = approvedSlotsMap[member.user_email]?.[date]
                   ?? approvedSlotsMap[memberEmailKey]?.[date];
 
                 return slots.map((slot, slotIndex) => {
                   let wishOverlap = false;
-                  if (app && app.day_status !== 'direct_approved') {
+                  if (app) {
                     const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
-                    wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
+                    if (app.day_status === 'direct_approved' && isAdminMember) {
+                      wishOverlap = overlaps(app.start_time, app.end_time, slot.start, slot.end);
+                    } else if (app.day_status !== 'direct_approved') {
+                      wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
+                    }
                   }
 
                   const hasKvSlots = !!kvSlots && kvSlots.length > 0;
