@@ -244,23 +244,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
             });
             return;
           }
-
-          schedules.forEach((schedule) => {
-            grouped[schedule.date].push({
-              id: application.id,
-              user_name: application.user_name,
-              user_email: application.user_email,
-              status: application.status,
-              day_status: application.status,
-              overall_status: application.status,
-              start_time: data.shift.start_time,
-              end_time: data.shift.end_time,
-              original_start_time: data.shift.start_time,
-              original_end_time: data.shift.end_time,
-              desired_shifts_per_week: application.desired_shifts_per_week,
-              selected: false,
-            });
-          });
         });
 
         setDateApplications(grouped);
@@ -273,7 +256,14 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
             getShiftRoles(shiftId),
             getShiftBreakpoints(shiftId),
           ]);
-          setGroupMembers(membersData.members || []);
+          setGroupMembers(
+            (membersData.members || [])
+              .filter((member: any) => member?.user_email && member.role !== 'admin')
+              .map((member: any) => ({
+                user_email: member.user_email,
+                user_name: member.user_name || member.user_email,
+              })),
+          );
           setApprovedSlotsMap(slotsMap || {});
           setRoles(shiftRoles || []);
           const nextBreakpoints = ((breakpoints || []) as CustomBreakpoint[])
