@@ -1,8 +1,8 @@
 services:
   - type: web
     name: app-contest
-    env: static
-    buildCommand: npm install && node node_modules/vite/bin/vite.js build
+    runtime: static
+    buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     pullRequestPreviewsEnabled: false
     routes:

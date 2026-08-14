@@ -85,6 +85,20 @@ npx vite preview
 
 これで主要な静的ホスティング環境で「再読み込みで Not Found」を回避できます。
 
+### Render 利用時の重要ポイント
+
+Render で **Dashboard から単体作成した Static Site** は、`render.yaml` を自動適用しない場合があります。
+その場合は Render の対象サービス画面で次を手動設定してください。
+
+1. `Redirects/Rewrites` を開く
+2. ルールを追加
+3. `Source: /*`
+4. `Destination: /index.html`
+5. `Action: Rewrite`
+6. 保存後に再デプロイ
+
+これが入っていないと、`/mypage` 直アクセスや再読み込みで 404 になります。
+
 ## デプロイ時のチェックリスト
 
 - Build Command が `npm run build` になっている
