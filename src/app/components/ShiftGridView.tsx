@@ -893,6 +893,10 @@ export function ShiftGridView({
                     : undefined;
                   const cellRole = matchingKvSlot?.roleId ? roles.find(r => r.id === matchingKvSlot.roleId) : undefined;
                   const isUnappliedApproved = cellState === 'approved' && isUnappliedCell;
+                  const approvedStart = (matchingKvSlot?.start ?? app?.start_time ?? slot.start).slice(0, 5);
+                  const approvedEnd = (matchingKvSlot?.end ?? app?.end_time ?? slot.end).slice(0, 5);
+                  const wishStart = (app ? (wishTimesMap[app.user_email]?.[date]?.start ?? app.original_start_time) : slot.start).slice(0, 5);
+                  const wishEnd = (app ? (wishTimesMap[app.user_email]?.[date]?.end ?? app.original_end_time) : slot.end).slice(0, 5);
 
                   const bgClass =
                     isUnappliedApproved
@@ -964,9 +968,9 @@ export function ShiftGridView({
                       style={bgStyle}
                       title={
                         cellState === 'approved'
-                          ? `${isUnappliedCell ? '未応募採用' : '採用済み'}${cellRole ? `（${cellRole.name}）` : ''}: ${(matchingKvSlot?.start ?? app!.start_time).slice(0,5)}〜${(matchingKvSlot?.end ?? app!.end_time).slice(0,5)}${isClickable ? '（クリックでロール変更・取り消し）' : ''}`
+                          ? `${isUnappliedCell ? '未応募採用' : '採用済み'}${cellRole ? `（${cellRole.name}）` : ''}: ${approvedStart}〜${approvedEnd}${isClickable ? '（クリックでロール変更・取り消し）' : ''}`
                           : cellState === 'wish'
-                          ? `勤務可能: ${(wishTimesMap[app!.user_email]?.[date]?.start ?? app!.original_start_time).slice(0,5)}〜${(wishTimesMap[app!.user_email]?.[date]?.end ?? app!.original_end_time).slice(0,5)}${isClickable ? '（クリックで採用）' : ''}`
+                          ? `勤務可能: ${wishStart}〜${wishEnd}${isClickable ? '（クリックで採用）' : ''}`
                           : app
                           ? `未応募枠（応募時間外）${isClickable ? '（クリックで採用）' : ''}`
                             : isAdminMember
