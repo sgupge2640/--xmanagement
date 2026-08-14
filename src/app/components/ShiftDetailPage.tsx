@@ -556,7 +556,28 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       toast.error('対象ユーザーのメールアドレスを特定できませんでした');
       return;
     }
-    await directHireMember(shiftId, date, userEmail.trim(), userName, startTime, endTime);
+    const normalizedEmail = userEmail.trim();
+    const nextMap: ApprovedSlotsMap = { ...approvedSlotsMap };
+    const existingUserSlots = nextMap[normalizedEmail] || {};
+    const existingDateSlots = [...(existingUserSlots[date] || [])];
+    const newSlot: ApprovedSlot = {
+      start: startTime,
+      end: endTime,
+      slotKey: `direct:${date}:${startTime}-${endTime}`,
+    };
+    const overlapIndex = existingDateSlots.findIndex((slot) => overlaps(slot.start, slot.end, startTime, endTime));
+    const nextDateSlots = overlapIndex >= 0
+      ? existingDateSlots.map((slot, index) => (index === overlapIndex ? { ...slot, ...newSlot } : slot))
+      : [...existingDateSlots, newSlot].sort((left, right) => left.start.localeCompare(right.start));
+
+    nextMap[normalizedEmail] = {
+      ...existingUserSlots,
+      [date]: nextDateSlots,
+    };
+
+    await directHireMember(shiftId, date, normalizedEmail, userName, startTime, endTime);
+    await saveApprovedSlotsMap(shiftId, nextMap);
+    setApprovedSlotsMap(nextMap);
     toast.success('未応募枠を採用しました');
     await loadDetail(false);
   };
