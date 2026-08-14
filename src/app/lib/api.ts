@@ -964,72 +964,78 @@ export async function directHireMember(
   endTime: string
 ) {
   const supabase = getSupabaseClient();
-
-  // 既存の応募を確認
-  const { data: existing } = await supabase
-    .from('shift_applications')
-    .select('id, status')
-    .eq('shift_id', shiftId)
-    .eq('user_email', userEmail)
-    .maybeSingle();
-
-  let applicationId: number;
-
-  if (existing) {
-    // 既存応募があればそれを使う
-    applicationId = existing.id;
-    // daily_schedules にその日がなければ追加
-    const { data: existingSchedule } = await supabase
-      .from('daily_schedules')
-      .select('id')
-      .eq('application_id', applicationId)
-      .eq('date', date)
+  try {
+    // 既存の応募を確認
+    const { data: existing } = await supabase
+      .from('shift_applications')
+      .select('id, status')
+      .eq('shift_id', shiftId)
+      .eq('user_email', userEmail)
       .maybeSingle();
 
-    if (existingSchedule) {
-      const { error } = await supabase
+    let applicationId: number;
+
+    if (existing) {
+      // 既存応募があればそれを使う
+      applicationId = existing.id;
+      // daily_schedules にその日がなければ追加
+      const { data: existingSchedule } = await supabase
         .from('daily_schedules')
-        .update({ status: 'direct_approved', start_time: startTime, end_time: endTime })
-        .eq('id', existingSchedule.id);
-      if (error) throw error;
+        .select('id')
+        .eq('application_id', applicationId)
+        .eq('date', date)
+        .maybeSingle();
+
+      if (existingSchedule) {
+        const { error } = await supabase
+          .from('daily_schedules')
+          .update({ status: 'direct_approved', start_time: startTime, end_time: endTime })
+          .eq('id', existingSchedule.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('daily_schedules')
+          .insert({ application_id: applicationId, date, start_time: startTime, end_time: endTime, status: 'direct_approved' });
+        if (error) throw error;
+      }
     } else {
-      const { error } = await supabase
+      // 新規応募レコードを作成（直接採用）
+      const { data: app, error: appError } = await supabase
+        .from('shift_applications')
+        .insert({ shift_id: shiftId, user_email: userEmail, user_name: userName, status: 'approved' })
+        .select()
+        .single();
+      if (appError) throw appError;
+      applicationId = app.id;
+
+      const { error: schedError } = await supabase
         .from('daily_schedules')
         .insert({ application_id: applicationId, date, start_time: startTime, end_time: endTime, status: 'direct_approved' });
-      if (error) throw error;
+      if (schedError) throw schedError;
     }
-  } else {
-    // 新規応募レコードを作成（直接採用）
-    const { data: app, error: appError } = await supabase
-      .from('shift_applications')
-      .insert({ shift_id: shiftId, user_email: userEmail, user_name: userName, status: 'approved' })
-      .select()
-      .single();
-    if (appError) throw appError;
-    applicationId = app.id;
 
-    const { error: schedError } = await supabase
+    // application の status を再計算
+    const { data: allSchedules } = await supabase
       .from('daily_schedules')
-      .insert({ application_id: applicationId, date, start_time: startTime, end_time: endTime, status: 'direct_approved' });
-    if (schedError) throw schedError;
+      .select('status')
+      .eq('application_id', applicationId);
+
+    if (allSchedules) {
+      const hasApproved = allSchedules.some(s => s.status === 'approved' || s.status === 'direct_approved');
+      const hasPending = allSchedules.some(s => s.status === 'pending');
+      await supabase
+        .from('shift_applications')
+        .update({ status: hasApproved && hasPending ? 'partially_approved' : hasApproved ? 'approved' : 'pending' })
+        .eq('id', applicationId);
+    }
+
+    return { message: '直接採用しました' };
+  } catch (error: any) {
+    if (error?.code === '23514' && String(error?.message || '').includes('daily_schedules_status_check')) {
+      throw new Error('DB設定で direct_approved が許可されていません。supabase/migrations/20260814_allow_direct_approved_daily_schedules.sql を実行してください。');
+    }
+    throw error;
   }
-
-  // application の status を再計算
-  const { data: allSchedules } = await supabase
-    .from('daily_schedules')
-    .select('status')
-    .eq('application_id', applicationId);
-
-  if (allSchedules) {
-    const hasApproved = allSchedules.some(s => s.status === 'approved' || s.status === 'direct_approved');
-    const hasPending = allSchedules.some(s => s.status === 'pending');
-    await supabase
-      .from('shift_applications')
-      .update({ status: hasApproved && hasPending ? 'partially_approved' : hasApproved ? 'approved' : 'pending' })
-      .eq('id', applicationId);
-  }
-
-  return { message: '直接採用しました' };
 }
 
 // 直接採用を取り消し（管理者のみ）
