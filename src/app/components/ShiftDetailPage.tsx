@@ -93,7 +93,6 @@ interface ApplicationForDate {
   original_start_time: string;
   original_end_time: string;
   desired_shifts_per_week?: number;
-  synthetic?: boolean;
   selected: boolean;
 }
 
@@ -242,7 +241,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                 original_start_time: day.start_time,
                 original_end_time: day.end_time,
                 desired_shifts_per_week: application.desired_shifts_per_week,
-                synthetic: false,
                 selected: false,
               });
             });
@@ -266,33 +264,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
               user_name: member.user_name || member.user_email,
               role: member.role,
             }));
-
-          const adminMembers = allMembers.filter((member: any) => member.role === 'admin');
-          const syntheticBaseId = -1000000000;
-
-          schedules.forEach((schedule, scheduleIndex) => {
-            if (!grouped[schedule.date]) grouped[schedule.date] = [];
-            adminMembers.forEach((admin, adminIndex) => {
-              const exists = grouped[schedule.date].some(
-                (item) => item.user_email.toLowerCase() === admin.user_email.toLowerCase(),
-              );
-              if (exists) return;
-              grouped[schedule.date].push({
-                id: syntheticBaseId + scheduleIndex * 1000 + adminIndex,
-                user_name: admin.user_name,
-                user_email: admin.user_email,
-                status: 'pending',
-                day_status: 'pending',
-                overall_status: 'pending',
-                start_time: schedule.start_time,
-                end_time: schedule.end_time,
-                original_start_time: schedule.start_time,
-                original_end_time: schedule.end_time,
-                synthetic: true,
-                selected: false,
-              });
-            });
-          });
 
           setDateApplications(grouped);
           setGroupMembers(allMembers);

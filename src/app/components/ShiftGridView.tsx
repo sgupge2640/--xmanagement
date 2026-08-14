@@ -16,7 +16,6 @@ interface ApplicationWithTime {
   start_time: string;
   end_time: string;
   day_status: string;
-  synthetic?: boolean;
 }
 
 interface Slot {
@@ -862,6 +861,9 @@ export function ShiftGridView({
                     } else if (app.day_status !== 'direct_approved') {
                       wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
                     }
+                  } else if (isAdminMember) {
+                    // 管理者は応募データがなくても一覧上は勤務可能として扱う
+                    wishOverlap = true;
                   }
 
                   const hasKvSlots = !!kvSlots && kvSlots.length > 0;
@@ -880,10 +882,10 @@ export function ShiftGridView({
                   }
 
                   const canOperate = isAdmin && mode === 'result';
-                  const canApproveExisting = !!canOperate && !!onApproveSlot && !!app && !app.synthetic && !isUnappliedCell;
-                  const canApproveSynthetic = !!canOperate && !!onDirectHireSlot && !!app?.synthetic && cellState !== 'approved';
+                  const canApproveExisting = !!canOperate && !!onApproveSlot && !!app && !isUnappliedCell;
+                  const canDirectHireAdmin = !!canOperate && !!onDirectHireSlot && !app && isAdminMember;
                   const canDirectHire = !!canOperate && !!onDirectHireSlot && isUnappliedCell;
-                  const isClickable = !approving && (canApproveExisting || canDirectHire || canApproveSynthetic);
+                  const isClickable = !approving && (canApproveExisting || canDirectHire || canDirectHireAdmin);
 
                   // 採用済みセルのロール色を取得
                   const matchingKvSlot = cellState === 'approved' && kvSlots
@@ -909,10 +911,10 @@ export function ShiftGridView({
                   const handleClick = async (e: React.MouseEvent) => {
                     if (!isClickable || approving) return;
 
-                    if (app?.synthetic && onDirectHireSlot) {
+                    if (!app && isAdminMember && onDirectHireSlot) {
                       await onDirectHireSlot({
-                        userEmail: app.user_email,
-                        userName: app.user_name,
+                        userEmail: member.user_email,
+                        userName: member.user_name,
                         date,
                         startTime: slot.start,
                         endTime: slot.end,
@@ -967,7 +969,9 @@ export function ShiftGridView({
                           ? `勤務可能: ${(wishTimesMap[app!.user_email]?.[date]?.start ?? app!.original_start_time).slice(0,5)}〜${(wishTimesMap[app!.user_email]?.[date]?.end ?? app!.original_end_time).slice(0,5)}${isClickable ? '（クリックで採用）' : ''}`
                           : app
                           ? `未応募枠（応募時間外）${isClickable ? '（クリックで採用）' : ''}`
-                          : `未応募（応募データなし）${isClickable ? '（クリックで採用）' : ''}`
+                            : isAdminMember
+                            ? `管理者（応募データなし）${isClickable ? '（クリックで採用）' : ''}`
+                            : `未応募（応募データなし）${isClickable ? '（クリックで採用）' : ''}`
                       }
                       onClick={(e) => {
                         void handleClick(e);
