@@ -875,8 +875,9 @@ export function ShiftGridView({
 
                   const canOperate = isAdmin && mode === 'result';
                   const canApproveExisting = !!canOperate && !!onApproveSlot && !!app && !app.synthetic && !isUnappliedCell;
+                  const canApproveSynthetic = !!canOperate && !!onDirectHireSlot && !!app?.synthetic && cellState !== 'approved';
                   const canDirectHire = !!canOperate && !!onDirectHireSlot && isUnappliedCell;
-                  const isClickable = !approving && (canApproveExisting || canDirectHire);
+                  const isClickable = !approving && (canApproveExisting || canDirectHire || canApproveSynthetic);
 
                   // 採用済みセルのロール色を取得
                   const matchingKvSlot = cellState === 'approved' && kvSlots
@@ -901,6 +902,17 @@ export function ShiftGridView({
 
                   const handleClick = async (e: React.MouseEvent) => {
                     if (!isClickable || approving) return;
+
+                    if (app?.synthetic && onDirectHireSlot) {
+                      await onDirectHireSlot({
+                        userEmail: app.user_email,
+                        userName: app.user_name,
+                        date,
+                        startTime: slot.start,
+                        endTime: slot.end,
+                      });
+                      return;
+                    }
 
                     if (app && cellState === 'approved') {
                       // 採用済み → ポップオーバー表示（ロール変更・取り消し）
