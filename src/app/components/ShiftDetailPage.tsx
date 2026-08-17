@@ -189,6 +189,11 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         data.shift.end_time,
       ).map((item) => {
         const userDay = userScheduleMap.get(item.date);
+        const shiftStart = item.start_time.slice(0, 5);
+        const shiftEnd = item.end_time.slice(0, 5);
+        const shiftStartMin = toMinutes(shiftStart);
+        const shiftEndMin = toMinutes(shiftEnd);
+
         if (lockedDateSet.has(item.date)) {
           if (!userDay) return item;
           return {
@@ -210,11 +215,35 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
           };
         }
 
+        const availableStart = userDay.start_time.slice(0, 5);
+        const availableEnd = userDay.end_time.slice(0, 5);
+        const availableStartMin = toMinutes(availableStart);
+        const availableEndMin = toMinutes(availableEnd);
+
+        // 保存値は「勤務可能時間」なので、再提出画面では「勤務不可時間」に逆算して復元する。
+        if (availableStartMin > shiftStartMin && availableStartMin <= shiftEndMin) {
+          return {
+            ...item,
+            checked: true,
+            start_time: shiftStart,
+            end_time: availableStart,
+          };
+        }
+
+        if (availableEndMin < shiftEndMin && availableEndMin >= shiftStartMin) {
+          return {
+            ...item,
+            checked: true,
+            start_time: availableEnd,
+            end_time: shiftEnd,
+          };
+        }
+
         return {
           ...item,
           checked: false,
-          start_time: userDay.start_time,
-          end_time: userDay.end_time,
+          start_time: shiftStart,
+          end_time: shiftEnd,
         };
       });
       setDailySchedules(schedules);
