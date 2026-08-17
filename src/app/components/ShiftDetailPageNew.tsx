@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from './ui/dialog';
-import { AppliedShiftCalendar } from './AppliedShiftCalendar';
+import { AppliedShiftCalendar } from './AppliedShiftCalendar.tsx';
 
 interface ShiftDetail {
   shift: {
@@ -130,12 +130,12 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>('');
   
-  // 日付ごとの応募老E��編雁E��能な時間
+  // 日付ごとの応募老E��編雁E��能な時間
   const [dateApplications, setDateApplications] = useState<{ [date: string]: ApplicationWithTime[] }>({});
   // 日付ごとの時間調整セクションの開閉
   const [timeAdjustOpen, setTimeAdjustOpen] = useState<{ [date: string]: boolean }>({});
 
-  // 日付リストを生�E
+  // 日付リストを生�E
   const generateDateList = (startDate: string, endDate: string, defaultStartTime: string, defaultEndTime: string): DailyScheduleItem[] => {
     const dates: DailyScheduleItem[] = [];
     const start = new Date(startDate);
@@ -159,7 +159,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
       const data = await getShiftDetail(shiftId);
       setDetail(data);
       
-      // 日ごとのスケジュールを�E期化
+      // 日ごとのスケジュールを�E期化
       const dates = generateDateList(
         data.shift.start_date,
         data.shift.end_date,
@@ -168,11 +168,11 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
       );
       setDailySchedules(dates);
       
-      // 最初�E日付を選抁E      if (dates.length > 0) {
+      // 最初�E日付を選抁E      if (dates.length > 0) {
         setSelectedDate(dates[0].date);
       }
       
-      // 日付ごとの応募老E��整琁E��管琁E��E���E�E      if (data.is_admin) {
+      // 日付ごとの応募老E��整琁E��管琁E��E���E�E      if (data.is_admin) {
         const dateApps: { [date: string]: ApplicationWithTime[] } = {};
         
         dates.forEach(({ date }) => {
@@ -196,7 +196,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
               });
             });
           } else {
-            // 全期間に応募してぁE��場吁E            dates.forEach(({ date }) => {
+            // 全期間に応募してぁE��場吁E            dates.forEach(({ date }) => {
               dateApps[date].push({
                 id: app.id,
                 user_name: app.user_name,
@@ -213,7 +213,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
         setDateApplications(dateApps);
       }
     } catch (error: any) {
-      toast.error(error.message || 'シフト惁E��の取得に失敗しました');
+      toast.error(error.message || 'シフト惁E��の取得に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -228,7 +228,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
   };
 
   const handleApply = async () => {
-    // チェチE��された日付�Eみを送信
+    // チェチE��された日付�Eみを送信
     const selectedSchedules = dailySchedules
       .filter(item => item.checked)
       .map(item => ({
@@ -245,7 +245,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
     setApplying(true);
     try {
       await applyToShift(shiftId, selectedSchedules);
-      toast.success('シフトに応募しました�E�E);
+      toast.success('シフトに応募しました�E�E);
       setShowApplicationForm(false);
       await loadDetail();
     } catch (error: any) {
@@ -267,7 +267,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
     setDailySchedules(newSchedules);
   };
 
-  // 管琁E��E���E�日付ごとの応募老E�E選択状態を変更
+  // 管琁E��E���E�日付ごとの応募老E�E選択状態を変更
   const handleApplicationSelect = (date: string, appId: number, checked: boolean) => {
     setDateApplications(prev => {
       const newState = { ...prev };
@@ -279,7 +279,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
     });
   };
 
-  // 管琁E��E���E�応募老E�E時間を変更
+  // 管琁E��E���E�応募老E�E時間を変更
   const handleApplicationTimeChange = (date: string, appId: number, field: 'start_time' | 'end_time', value: string) => {
     setDateApplications(prev => {
       const newState = { ...prev };
@@ -291,7 +291,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
     });
   };
 
-  // 管琁E��E���E�選択した応募を承誁E  const handleApproveSelectedForDate = async (date: string) => {
+  // 管琁E��E���E�選択した応募を承誁E  const handleApproveSelectedForDate = async (date: string) => {
     const apps = dateApplications[date] || [];
     const selected = apps.filter(app => app.selected && app.status === 'pending');
     
@@ -302,7 +302,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
 
     setProcessingDate(date);
     try {
-      // 吁E��募を個別に承認（管琁E��E��設定した時間で�E�E      for (const app of selected) {
+      // 吁E��募を個別に承認（管琁E��E��設定した時間で�E�E      for (const app of selected) {
         const approvedSchedule = [{
           date: date,
           start_time: app.start_time,
@@ -323,7 +323,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
     setPublishingResults(true);
     try {
       await publishShiftResults(shiftId, resultsMessage);
-      toast.success('結果を�E開しました');
+      toast.success('結果を�E開しました');
       await loadDetail();
     } catch (error: any) {
       toast.error(error.message || '結果の公開に失敗しました');
@@ -375,7 +375,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
             戻めE          </Button>
           <Card>
             <CardContent className="py-12 text-center">
-              <p className="text-gray-500">シフト惁E��が見つかりません</p>
+              <p className="text-gray-500">シフト惁E��が見つかりません</p>
             </CardContent>
           </Card>
         </div>
@@ -405,7 +405,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
                   <CardTitle className="text-2xl">{shift.title}</CardTitle>
                   {isDeadlinePassed && (
                     <Badge variant="outline" className="text-red-600 border-red-600">
-                      締刁E��亁E                    </Badge>
+                      締刁E��亁E                    </Badge>
                   )}
                 </div>
                 <CardDescription>{shift.group_name}</CardDescription>
@@ -454,7 +454,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
                   disabled={isDeadlinePassed} 
                   className="w-full"
                 >
-                  {isDeadlinePassed ? '応募締刁E��み' : 'こ�Eシフトに応募する'}
+                  {isDeadlinePassed ? '応募締刁E��み' : 'こ�Eシフトに応募する'}
                 </Button>
               </div>
             )}
@@ -492,7 +492,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
                               </div>
                               <div>
                                 <Label htmlFor={`end-${index}`} className="text-sm text-gray-600">
-                                  終亁E��刻
+                                  終亁E��刻
                                 </Label>
                                 <Input
                                   id={`end-${index}`}
@@ -533,7 +533,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
                 {userApplication.status === 'pending' && (
                   <Badge variant="secondary" className="w-full justify-center py-2">
                     <AlertCircle className="h-4 w-4 mr-2" />
-                    承認征E��
+                    承認征E��
                   </Badge>
                 )}
                 {userApplication.status === 'approved' && (
@@ -551,11 +551,13 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
                 
                 {userApplication.daily_schedule && userApplication.daily_schedule.length > 0 && (
                   <div className="border-t pt-3">
-                    <h4 className="text-sm font-medium text-gray-700 mb-3">あなた�E応募冁E��</h4>
+                    <h4 className="text-sm font-medium text-gray-700 mb-3">あなた�E応募冁E��</h4>
                     <AppliedShiftCalendar
                       appliedDays={userApplication.daily_schedule}
                       startDate={shift.start_date}
                       endDate={shift.end_date}
+                      shiftStartTime={shift.start_time}
+                      shiftEndTime={shift.end_time}
                     />
                   </div>
                 )}
@@ -564,15 +566,15 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
           </CardContent>
         </Card>
 
-        {/* 日付別応募老E��覧�E�管琁E��E�Eみ�E�E*/}
+        {/* 日付別応募老E��覧�E�管琁E��E�Eみ�E�E*/}
         {is_admin && (
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <CardTitle>日付別応募老E��琁E/CardTitle>
+                  <CardTitle>日付別応募老E��琁E/CardTitle>
                   <CardDescription>
-                    {applications.length}件の応募�E�承認済み: {approvedCount}件、承認征E��: {pendingCount}件�E�E                  </CardDescription>
+                    {applications.length}件の応募�E�承認済み: {approvedCount}件、承認征E��: {pendingCount}件�E�E                  </CardDescription>
                 </div>
                 {!shift.results_published && applications.length > 0 && (
                   <Button
@@ -607,7 +609,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
               {applications.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p>まだ応募老E��ぁE��せん</p>
+                  <p>まだ応募老E��ぁE��せん</p>
                 </div>
               ) : (
                 <Tabs value={selectedDate} onValueChange={setSelectedDate}>
@@ -656,16 +658,16 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
 
                           {appsForDate.length === 0 ? (
                             <div className="text-center py-8 text-gray-500">
-                              <p>こ�E日の応募老E�EぁE��せん</p>
+                              <p>こ�E日の応募老E�EぁE��せん</p>
                             </div>
                           ) : (
                             <div className="space-y-3">
-                              {/* 承認征E�� */}
+                              {/* 承認征E�� */}
                               {pendingApps.length > 0 && (
                                 <div>
                                   <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                                     <AlertCircle className="h-4 w-4" />
-                                    承認征E�� ({pendingApps.length})
+                                    承認征E�� ({pendingApps.length})
                                   </h4>
                                   <div className="space-y-2">
                                     {pendingApps.map((app) => (
@@ -690,7 +692,7 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
                                         </div>
                                       </div>
                                     ))}
-                                    {/* 選択済みの時間調整�E�折りたたみ�E�E*/}
+                                    {/* 選択済みの時間調整�E�折りたたみ�E�E*/}
                                     {(() => {
                                       const selectedPending = pendingApps.filter(a => a.selected);
                                       if (selectedPending.length === 0 || shift.results_published) return null;
@@ -743,18 +745,18 @@ export function ShiftDetailPage({ shiftId, onBack }: ShiftDetailPageProps) {
         <Dialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>採用結果を発表しますか�E�E/DialogTitle>
+              <DialogTitle>採用結果を発表しますか�E�E/DialogTitle>
               <DialogDescription>
-                結果を発表すると、承認征E��の応募は自動的に不採用となります。この操作�E取り消せません、E              </DialogDescription>
+                結果を発表すると、承認征E��の応募は自動的に不採用となります。この操作�E取り消せません、E              </DialogDescription>
             </DialogHeader>
             <div className="py-4">
               <Label htmlFor="results-message" className="text-sm font-medium">
-                メチE��ージ�E�任意！E              </Label>
+                メチE��ージ�E�任意！E              </Label>
               <Textarea
                 id="results-message"
                 value={resultsMessage}
                 onChange={(e) => setResultsMessage(e.target.value)}
-                placeholder="採用老E��のメチE��ージを�E力してください�E�例：お疲れ様でした�E�採用された方はご確認ください。！E
+                placeholder="採用老E��のメチE��ージを�E力してください�E�例：お疲れ様でした�E�採用された方はご確認ください。！E
                 className="mt-2"
                 rows={4}
               />

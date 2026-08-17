@@ -28,7 +28,7 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { AppliedShiftCalendar } from './AppliedShiftCalendar';
+import { AppliedShiftCalendar } from './AppliedShiftCalendar.tsx';
 import { ShiftApplicationCalendar } from './ShiftApplicationCalendar';
 import { ShiftGridView } from './ShiftGridView';
 
@@ -849,6 +849,8 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                       appliedDays={userApplication.daily_schedule}
                       startDate={shift.start_date}
                       endDate={shift.end_date}
+                      shiftStartTime={shift.start_time}
+                      shiftEndTime={shift.end_time}
                       publishedDates={shift.results_published ? null : publishedDates}
                       shiftId={shift.id}
                       userEmail={currentUserEmail}
