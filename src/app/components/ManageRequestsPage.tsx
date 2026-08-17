@@ -13,7 +13,8 @@ interface JoinRequest {
   user_email: string;
   user_name: string;
   status: string;
-  requested_at: string;
+  requested_at?: string;
+  created_at?: string;
 }
 
 interface ManageRequestsPageProps {
@@ -32,7 +33,7 @@ export function ManageRequestsPage({ groupId, groupName, onBack }: ManageRequest
     try {
       setLoading(true);
       const data = await getJoinRequests(groupId);
-      // APIレスポンスから配�Eを取征E      setRequests(data.requests || []);
+      setRequests(data.requests || []);
     } catch (error: any) {
       toast.error(error.message || t.manageRequests.loading);
     } finally {
@@ -70,7 +71,8 @@ export function ManageRequestsPage({ groupId, groupName, onBack }: ManageRequest
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleString();
   };
@@ -116,7 +118,7 @@ export function ManageRequestsPage({ groupId, groupName, onBack }: ManageRequest
                             {request.user_name}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {t.manageRequests.requestedAt}: {formatDate(request.requested_at)}
+                            {t.manageRequests.requestedAt}: {formatDate(request.requested_at || request.created_at)}
                           </p>
                         </div>
                         <div className="flex gap-2">
