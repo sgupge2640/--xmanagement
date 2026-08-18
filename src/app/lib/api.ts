@@ -355,6 +355,12 @@ export async function approveJoinRequest(requestId: number) {
     .single();
   
   if (fetchError || !request) throw new Error('リクエストが見つかりません');
+
+  const { data: targetUser } = await supabase
+    .from('users')
+    .select('id, email, name')
+    .eq('email', request.user_email)
+    .maybeSingle();
   
   const memberData = {
     group_id: request.group_id,
@@ -365,29 +371,52 @@ export async function approveJoinRequest(requestId: number) {
   };
 
   // グループメンバーに追加
-  const { error: memberError } = await supabase
+  let insertedWithUserId = false;
+  let { error: memberError } = await supabase
     .from('group_members')
     .insert(memberData);
 
+  if (memberError && targetUser?.id) {
+    const { error: userIdInsertError } = await supabase
+      .from('group_members')
+      .insert({
+        group_id: request.group_id,
+        user_id: targetUser.id,
+        role: 'member',
+        status: 'active',
+      });
+
+    if (!userIdInsertError) {
+      insertedWithUserId = true;
+      memberError = null;
+    }
+  }
+
   if (memberError) {
-    const { error: updateMemberError } = await supabase
+    const { data: updatedMember, error: updateMemberError } = await supabase
       .from('group_members')
       .update({
         user_name: memberData.user_name,
         role: memberData.role,
       })
       .eq('group_id', request.group_id)
-      .eq('user_email', request.user_email);
+      .eq('user_email', request.user_email)
+      .select('id')
+      .maybeSingle();
 
-    if (updateMemberError) throw memberError;
+    if (updateMemberError || !updatedMember) {
+      throw new Error(`メンバー追加に失敗しました: ${memberError.message}`);
+    }
   }
 
-  const { data: confirmedMember, error: confirmError } = await supabase
+  const confirmQuery = supabase
     .from('group_members')
     .select('id')
-    .eq('group_id', request.group_id)
-    .eq('user_email', request.user_email)
-    .maybeSingle();
+    .eq('group_id', request.group_id);
+
+  const { data: confirmedMember, error: confirmError } = insertedWithUserId && targetUser?.id
+    ? await confirmQuery.or(`user_email.eq.${request.user_email},user_id.eq.${targetUser.id}`).maybeSingle()
+    : await confirmQuery.eq('user_email', request.user_email).maybeSingle();
 
   if (confirmError) throw confirmError;
   if (!confirmedMember) {
@@ -431,7 +460,30 @@ export async function getGroupMembers(groupId: number) {
       .order('joined_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    const loadedMembers = data || [];
+    const missingUserIds = loadedMembers
+      .filter((member: any) => !member.user_email && member.user_id)
+      .map((member: any) => member.user_id);
+
+    if (missingUserIds.length === 0) return loadedMembers;
+
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id, email, name')
+      .in('id', missingUserIds);
+
+    if (usersError) return loadedMembers;
+
+    return loadedMembers.map((member: any) => {
+      if (member.user_email || !member.user_id) return member;
+
+      const user = (users || []).find((item: any) => item.id === member.user_id);
+      return {
+        ...member,
+        user_email: user?.email || '',
+        user_name: user?.name || user?.email || '',
+      };
+    });
   };
 
   let members = await loadMembers();
