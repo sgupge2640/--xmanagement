@@ -356,18 +356,43 @@ export async function approveJoinRequest(requestId: number) {
   
   if (fetchError || !request) throw new Error('リクエストが見つかりません');
   
+  const memberData = {
+    group_id: request.group_id,
+    user_email: request.user_email,
+    user_name: request.user_name || request.user_email,
+    role: 'member',
+    joined_at: new Date().toISOString(),
+  };
+
   // グループメンバーに追加
   const { error: memberError } = await supabase
     .from('group_members')
-    .insert({
-      group_id: request.group_id,
-      user_email: request.user_email,
-      user_name: request.user_name || request.user_email,
-      role: 'member',
-      joined_at: new Date().toISOString(),
-    });
-  
-  if (memberError) throw memberError;
+    .insert(memberData);
+
+  if (memberError) {
+    const { error: updateMemberError } = await supabase
+      .from('group_members')
+      .update({
+        user_name: memberData.user_name,
+        role: memberData.role,
+      })
+      .eq('group_id', request.group_id)
+      .eq('user_email', request.user_email);
+
+    if (updateMemberError) throw memberError;
+  }
+
+  const { data: confirmedMember, error: confirmError } = await supabase
+    .from('group_members')
+    .select('id')
+    .eq('group_id', request.group_id)
+    .eq('user_email', request.user_email)
+    .maybeSingle();
+
+  if (confirmError) throw confirmError;
+  if (!confirmedMember) {
+    throw new Error('メンバー追加を確認できませんでした。もう一度承認してください。');
+  }
   
   // リクエストのステータスを更新
   const { error: updateError } = await supabase
@@ -397,15 +422,65 @@ export async function rejectJoinRequest(requestId: number) {
 // グループメンバー一覧を取得
 export async function getGroupMembers(groupId: number) {
   const supabase = getSupabaseClient();
-  
-  const { data: members, error } = await supabase
-    .from('group_members')
-    .select('*')
+
+  const loadMembers = async () => {
+    const { data, error } = await supabase
+      .from('group_members')
+      .select('*')
+      .eq('group_id', groupId)
+      .order('joined_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  };
+
+  let members = await loadMembers();
+
+  const memberEmails = new Set(
+    members
+      .map((member: any) => member.user_email)
+      .filter(Boolean)
+      .map((email: string) => email.toLowerCase())
+  );
+
+  const { data: approvedRequests, error: requestError } = await supabase
+    .from('join_requests')
+    .select('user_email, user_name')
     .eq('group_id', groupId)
-    .order('joined_at', { ascending: false });
-  
-  if (error) throw error;
-  
+    .eq('status', 'approved');
+
+  if (requestError) throw requestError;
+
+  const missingRequestsByEmail = new Map<string, any>();
+  (approvedRequests || []).forEach((request: any) => {
+    const email = request.user_email?.toLowerCase();
+    if (email && !memberEmails.has(email) && !missingRequestsByEmail.has(email)) {
+      missingRequestsByEmail.set(email, request);
+    }
+  });
+
+  const missingMembers = Array.from(missingRequestsByEmail.values()).map((request: any) => ({
+    id: -Math.abs(String(request.user_email).split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)),
+    group_id: groupId,
+    user_email: request.user_email,
+    user_name: request.user_name || request.user_email,
+    role: 'member',
+    joined_at: new Date().toISOString(),
+  }));
+
+  if (missingMembers.length > 0) {
+    const { error: repairError } = await supabase
+      .from('group_members')
+      .insert(missingMembers.map(({ id, ...member }) => member));
+
+    if (repairError) {
+      console.error('Failed to repair approved group members:', repairError);
+      members = [...members, ...missingMembers];
+    } else {
+      members = await loadMembers();
+    }
+  }
+
   return { members };
 }
 
