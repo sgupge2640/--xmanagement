@@ -362,8 +362,9 @@ export async function approveJoinRequest(requestId: number) {
     .insert({
       group_id: request.group_id,
       user_email: request.user_email,
-      user_name: request.user_name,
+      user_name: request.user_name || request.user_email,
       role: 'member',
+      joined_at: new Date().toISOString(),
     });
   
   if (memberError) throw memberError;
