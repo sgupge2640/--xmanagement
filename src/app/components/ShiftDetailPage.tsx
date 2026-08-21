@@ -917,7 +917,15 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                     <h4 className="text-sm font-medium text-gray-700 mb-3">あなたの応募内容</h4>
                     <AppliedShiftCalendar
                       key={`${shift.id}-${userApplication.applied_at}`}
-                      appliedDays={userApplication.daily_schedule}
+                      appliedDays={dailySchedules
+                        .filter((schedule) => schedule.checked)
+                        .map((schedule) => ({
+                          date: schedule.date,
+                          start_time: schedule.start_time,
+                          end_time: schedule.end_time,
+                          status: 'pending',
+                        }))}
+                      submittedUnavailableDays
                       startDate={shift.start_date}
                       endDate={shift.end_date}
                       shiftStartTime={shift.start_time}

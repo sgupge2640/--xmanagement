@@ -22,6 +22,7 @@ interface AppliedDay {
 
 interface AppliedShiftCalendarProps {
   appliedDays: AppliedDay[];
+  submittedUnavailableDays?: boolean;
   startDate?: string;
   endDate?: string;
   shiftStartTime?: string;
@@ -107,6 +108,7 @@ function buildDateRange(startDate: string, endDate: string) {
 
 export function AppliedShiftCalendar({
   appliedDays,
+  submittedUnavailableDays = false,
   startDate,
   endDate,
   shiftStartTime,
@@ -165,6 +167,14 @@ export function AppliedShiftCalendar({
     }
 
     if (!startDate || !endDate) return [] as AppliedDay[];
+
+    if (submittedUnavailableDays) {
+      return appliedDays.map((day) => ({
+        ...day,
+        start_time: day.start_time.slice(0, 5),
+        end_time: day.end_time.slice(0, 5),
+      }));
+    }
 
     const shiftDates = buildDateRange(startDate, endDate);
     if (shiftDates.length === 0) return [] as AppliedDay[];
@@ -225,7 +235,7 @@ export function AppliedShiftCalendar({
 
       return unavailableRanges;
     });
-  }, [isResultsPublished, appliedDays, userEmail, approvedSlotsMap, startDate, endDate, shiftStartTime, shiftEndTime]);
+  }, [isResultsPublished, submittedUnavailableDays, appliedDays, userEmail, approvedSlotsMap, startDate, endDate, shiftStartTime, shiftEndTime]);
 
   const [currentMonth, setCurrentMonth] = useState(() => {
     if (displayedDays.length > 0) {
