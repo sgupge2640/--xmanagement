@@ -351,16 +351,19 @@ export function ShiftGridView({
   const resultCounts: { [dateSlot: string]: number } = {};
   dailySchedules.forEach(({ date }) => {
     const apps = filteredDateApplications[date] || [];
+    const uniqueApps = [...new Map(
+      apps.map((app) => [normalizeEmail(app.user_email), app] as const),
+    ).values()];
     slots.forEach(slot => {
       const key = `${date}__${slot.name || slot.start}`;
-      wishCounts[key] = apps.filter(app => {
+      wishCounts[key] = uniqueApps.filter(app => {
         if (app.day_status === 'direct_approved') {
           return false;
         }
         const wishRanges = getWishRanges(wishTimesMap, app.user_email, date, { start: app.original_start_time, end: app.original_end_time });
         return wishRanges.some((range) => overlaps(range.start, range.end, slot.start, slot.end));
       }).length;
-      resultCounts[key] = apps.filter(app => {
+      resultCounts[key] = uniqueApps.filter(app => {
         const kvSlots = approvedSlotsMap[app.user_email]?.[date];
         if (kvSlots && kvSlots.length > 0) {
           return kvSlots.some(ks => overlaps(ks.start, ks.end, slot.start, slot.end));

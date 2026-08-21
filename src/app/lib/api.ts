@@ -740,10 +740,24 @@ export async function getShiftDetail(shiftId: number) {
     .eq('shift_id', shiftId);
   
   if (appError) throw appError;
+
+  const latestApplicationsByEmail = new Map<string, any>();
+  (applications || []).forEach((application: any) => {
+    const emailKey = (application.user_email || '').trim().toLowerCase();
+    const current = latestApplicationsByEmail.get(emailKey);
+    if (
+      !current
+      || application.applied_at > current.applied_at
+      || (application.applied_at === current.applied_at && application.id > current.id)
+    ) {
+      latestApplicationsByEmail.set(emailKey, application);
+    }
+  });
+  const currentApplications = [...latestApplicationsByEmail.values()];
   
   // 各応募の日別スケジュールを取得
   const applicationsWithSchedules = await Promise.all(
-    (applications || []).map(async (app: any) => {
+    currentApplications.map(async (app: any) => {
       const { data: schedules } = await supabase
         .from('daily_schedules')
         .select('id, date, start_time, end_time, status')
@@ -776,7 +790,7 @@ export async function getShiftDetail(shiftId: number) {
       .eq('group_id', shift.group_id);
     
     if (allMembers) {
-      const appliedEmails = new Set(applications?.map(app => app.user_email) || []);
+      const appliedEmails = new Set(currentApplications.map(app => app.user_email) || []);
       // 管理者を除外して未応募メンバーをフィルタ
       unappliedMembers = allMembers.filter(member => 
         !appliedEmails.has(member.user_email) && member.role !== 'admin'
@@ -832,6 +846,9 @@ export async function applyToShift(
     .select('id')
     .eq('shift_id', shiftId)
     .ilike('user_email', userEmail)
+    .order('applied_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   let applicationId: number;

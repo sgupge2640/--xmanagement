@@ -178,7 +178,10 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
       const currentUserApplication = data.applications
         .filter((app) => app.user_email.trim().toLowerCase() === currentUserEmail)
-        .sort((left, right) => right.applied_at.localeCompare(left.applied_at))[0];
+        .sort((left, right) => {
+          const appliedAtOrder = right.applied_at.localeCompare(left.applied_at);
+          return appliedAtOrder || right.id - left.id;
+        })[0];
       const lockedDateSet = new Set(loadedPublishedDates);
       const userScheduleMap = new Map<string, DaySchedule[]>();
       (currentUserApplication?.daily_schedule || []).forEach((day: DaySchedule) => {
@@ -795,7 +798,10 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
   const userApplication = applications
     .filter((app) => app.user_email.trim().toLowerCase() === currentUserEmail)
-    .sort((left, right) => right.applied_at.localeCompare(left.applied_at))[0];
+    .sort((left, right) => {
+      const appliedAtOrder = right.applied_at.localeCompare(left.applied_at);
+      return appliedAtOrder || right.id - left.id;
+    })[0];
   const isDeadlinePassed = new Date(shift.application_deadline) < new Date();
   const applicantWeeklySummaries = applications
     .map((application) => {
