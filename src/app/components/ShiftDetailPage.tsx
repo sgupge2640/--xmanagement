@@ -178,12 +178,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
       const currentUserApplication = data.applications
         .filter((app) => app.user_email.trim().toLowerCase() === currentUserEmail)
-        .sort((left, right) => {
-          const leftHasSchedules = (left.daily_schedule?.length || 0) > 0 ? 1 : 0;
-          const rightHasSchedules = (right.daily_schedule?.length || 0) > 0 ? 1 : 0;
-          if (rightHasSchedules !== leftHasSchedules) return rightHasSchedules - leftHasSchedules;
-          return right.applied_at.localeCompare(left.applied_at);
-        })[0];
+        .sort((left, right) => right.applied_at.localeCompare(left.applied_at))[0];
       const lockedDateSet = new Set(loadedPublishedDates);
       const userScheduleMap = new Map<string, DaySchedule[]>();
       (currentUserApplication?.daily_schedule || []).forEach((day: DaySchedule) => {
@@ -191,6 +186,12 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         schedules.push(day);
         userScheduleMap.set(day.date, schedules);
       });
+      const shiftStart = data.shift.start_time.slice(0, 5);
+      const shiftEnd = data.shift.end_time.slice(0, 5);
+      const hasFullShiftSchedule = [...userScheduleMap.values()]
+        .flat()
+        .some((day) => day.start_time.slice(0, 5) === shiftStart && day.end_time.slice(0, 5) === shiftEnd);
+      const isLegacyUnavailableOnly = userScheduleMap.size > 0 && !hasFullShiftSchedule;
 
       const schedules = buildDateList(
         data.shift.start_date,
@@ -217,6 +218,16 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         // 勤務不可日入力方式: checked=true を「勤務不可」として扱う
         if (!currentUserApplication || userScheduleMap.size === 0) {
           return item;
+        }
+
+        if (isLegacyUnavailableOnly) {
+          if (!userDay) return item;
+          return {
+            ...item,
+            checked: true,
+            start_time: userDay.start_time,
+            end_time: userDay.end_time,
+          };
         }
 
         if (!userDay) {
@@ -774,12 +785,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
   const userApplication = applications
     .filter((app) => app.user_email.trim().toLowerCase() === currentUserEmail)
-    .sort((left, right) => {
-      const leftHasSchedules = (left.daily_schedule?.length || 0) > 0 ? 1 : 0;
-      const rightHasSchedules = (right.daily_schedule?.length || 0) > 0 ? 1 : 0;
-      if (rightHasSchedules !== leftHasSchedules) return rightHasSchedules - leftHasSchedules;
-      return right.applied_at.localeCompare(left.applied_at);
-    })[0];
+    .sort((left, right) => right.applied_at.localeCompare(left.applied_at))[0];
   const isDeadlinePassed = new Date(shift.application_deadline) < new Date();
   const applicantWeeklySummaries = applications
     .map((application) => {
