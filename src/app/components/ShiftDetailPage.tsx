@@ -498,14 +498,16 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   );
 
   const wishTimesMap = useMemo(() => {
-    const map: { [email: string]: { [date: string]: { start: string; end: string } } } = {};
+    const map: { [email: string]: { [date: string]: { start: string; end: string }[] } } = {};
     Object.entries(dateApplications).forEach(([date, apps]) => {
       apps.forEach((app) => {
         if (!map[app.user_email]) map[app.user_email] = {};
-        map[app.user_email][date] = {
+        const ranges = map[app.user_email][date] || [];
+        ranges.push({
           start: app.original_start_time,
           end: app.original_end_time,
-        };
+        });
+        map[app.user_email][date] = ranges;
       });
     });
     return map;

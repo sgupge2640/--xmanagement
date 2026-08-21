@@ -24,6 +24,8 @@ interface Slot {
   name: string;
 }
 
+type TimeRange = { start: string; end: string };
+
 interface DailySchedule {
   date: string;
   displayDate: string;
@@ -41,7 +43,7 @@ interface ShiftGridViewProps {
   isAdmin?: boolean;
   publishedDates?: string[];
   approvedSlotsMap?: { [email: string]: { [date: string]: ApprovedSlot[] } };
-  wishTimesMap?: { [email: string]: { [date: string]: { start: string; end: string } } };
+  wishTimesMap?: { [email: string]: { [date: string]: TimeRange[] } };
   roles?: ShiftRole[];
   onApproveSlot?: (appId: number, date: string, startTime: string, endTime: string, slots?: ApprovedSlot[]) => Promise<void>;
   onUnapproveSlot?: (appId: number, date: string, slotStart?: string, slotEnd?: string) => Promise<void>;
@@ -68,6 +70,15 @@ function toMinutes(t: string) {
 
 function overlaps(appStart: string, appEnd: string, slotStart: string, slotEnd: string) {
   return toMinutes(appStart) < toMinutes(slotEnd) && toMinutes(appEnd) > toMinutes(slotStart);
+}
+
+function getWishRanges(
+  wishTimesMap: { [email: string]: { [date: string]: TimeRange[] } },
+  email: string,
+  date: string,
+  fallback: TimeRange,
+) {
+  return wishTimesMap[email]?.[date] ?? [fallback];
 }
 
 function escapeXml(value: string) {
@@ -346,8 +357,8 @@ export function ShiftGridView({
         if (app.day_status === 'direct_approved') {
           return false;
         }
-        const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
-        return overlaps(wt.start, wt.end, slot.start, slot.end);
+        const wishRanges = getWishRanges(wishTimesMap, app.user_email, date, { start: app.original_start_time, end: app.original_end_time });
+        return wishRanges.some((range) => overlaps(range.start, range.end, slot.start, slot.end));
       }).length;
       resultCounts[key] = apps.filter(app => {
         const kvSlots = approvedSlotsMap[app.user_email]?.[date];
@@ -471,8 +482,8 @@ export function ShiftGridView({
               let bg = '#d1d5db';
               let text = '';
               if (app) {
-                const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
-                const wished = overlaps(wt.start, wt.end, slot.start, slot.end);
+                const wishRanges = getWishRanges(wishTimesMap, app.user_email, date, { start: app.original_start_time, end: app.original_end_time });
+                const wished = wishRanges.some((range) => overlaps(range.start, range.end, slot.start, slot.end));
                 if (wished) {
                   bg = '#ffffff';
                   text = '○';
@@ -592,8 +603,8 @@ export function ShiftGridView({
             const borderVariant = getBorderVariant(slots.indexOf(slot), slots.length);
             let styleId = styleIds.emptyCell[borderVariant];
             if (app) {
-              const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
-              const wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
+              const wishRanges = getWishRanges(wishTimesMap, app.user_email, date, { start: app.original_start_time, end: app.original_end_time });
+              const wishOverlap = wishRanges.some((range) => overlaps(range.start, range.end, slot.start, slot.end));
               if (wishOverlap) {
                 styleId = styleIds.wishCell[borderVariant];
                 if (
@@ -855,13 +866,13 @@ export function ShiftGridView({
                 return slots.map((slot, slotIndex) => {
                   let wishOverlap = false;
                   if (app) {
-                    const wt = wishTimesMap[app.user_email]?.[date] ?? { start: app.original_start_time, end: app.original_end_time };
+                    const wishRanges = getWishRanges(wishTimesMap, app.user_email, date, { start: app.original_start_time, end: app.original_end_time });
                     if (isAdminMember) {
                       wishOverlap = true;
                     } else if (app.day_status === 'direct_approved') {
                       wishOverlap = overlaps(app.start_time, app.end_time, slot.start, slot.end);
                     } else if (app.day_status !== 'direct_approved') {
-                      wishOverlap = overlaps(wt.start, wt.end, slot.start, slot.end);
+                      wishOverlap = wishRanges.some((range) => overlaps(range.start, range.end, slot.start, slot.end));
                     }
                   } else if (isAdminMember) {
                     // 管理者は応募データがなくても一覧上は勤務可能として扱う
@@ -898,8 +909,12 @@ export function ShiftGridView({
                   const isUnappliedApproved = cellState === 'approved' && isUnappliedCell;
                   const approvedStart = (matchingKvSlot?.start ?? app?.start_time ?? slot.start).slice(0, 5);
                   const approvedEnd = (matchingKvSlot?.end ?? app?.end_time ?? slot.end).slice(0, 5);
-                  const wishStart = (app ? (wishTimesMap[app.user_email]?.[date]?.start ?? app.original_start_time) : slot.start).slice(0, 5);
-                  const wishEnd = (app ? (wishTimesMap[app.user_email]?.[date]?.end ?? app.original_end_time) : slot.end).slice(0, 5);
+                  const matchingWishRange = app
+                    ? getWishRanges(wishTimesMap, app.user_email, date, { start: app.original_start_time, end: app.original_end_time })
+                      .find((range) => overlaps(range.start, range.end, slot.start, slot.end))
+                    : undefined;
+                  const wishStart = (matchingWishRange?.start ?? slot.start).slice(0, 5);
+                  const wishEnd = (matchingWishRange?.end ?? slot.end).slice(0, 5);
 
                   const bgClass =
                     isUnappliedApproved
