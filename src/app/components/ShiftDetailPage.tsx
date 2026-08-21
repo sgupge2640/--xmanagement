@@ -63,6 +63,7 @@ interface ShiftDetailData {
     status: string;
     applied_at: string;
     desired_shifts_per_week?: number;
+    submitted_unavailable_ranges?: Array<{ date: string; start_time: string; end_time: string }>;
     daily_schedule?: DaySchedule[];
   }>;
   is_admin: boolean;
@@ -191,6 +192,9 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       });
       const shiftStart = data.shift.start_time.slice(0, 5);
       const shiftEnd = data.shift.end_time.slice(0, 5);
+      const submittedUnavailableMap = new Map(
+        (currentUserApplication?.submitted_unavailable_ranges || []).map((range) => [range.date, range] as const),
+      );
       const dateCount = buildDateList(
         data.shift.start_date,
         data.shift.end_date,
@@ -222,6 +226,26 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
             ...item,
             start_time: userDay.start_time,
             end_time: userDay.end_time,
+          };
+        }
+
+        const submittedUnavailable = submittedUnavailableMap.get(item.date);
+        if (submittedUnavailable) {
+          return {
+            ...item,
+            checked: true,
+            start_time: submittedUnavailable.start_time,
+            end_time: submittedUnavailable.end_time,
+          };
+        }
+
+        if (currentUserApplication?.submitted_unavailable_ranges !== undefined
+          && currentUserApplication?.submitted_unavailable_ranges !== null) {
+          return {
+            ...item,
+            checked: false,
+            start_time: shiftStart,
+            end_time: shiftEnd,
           };
         }
 
@@ -415,6 +439,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     const shiftEndMin = toMinutesSafe(shiftEnd);
 
     const availableSchedules: Array<{ date: string; start_time: string; end_time: string }> = [];
+    const submittedUnavailableRanges: Array<{ date: string; start_time: string; end_time: string }> = [];
 
     for (const item of dailySchedules) {
       if (publishedDates.includes(item.date)) continue;
@@ -432,6 +457,12 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       const unavailableEnd = item.end_time.slice(0, 5);
       const unavailableStartMin = toMinutesSafe(unavailableStart);
       const unavailableEndMin = toMinutesSafe(unavailableEnd);
+
+      submittedUnavailableRanges.push({
+        date: item.date,
+        start_time: unavailableStart,
+        end_time: unavailableEnd,
+      });
 
       if (unavailableStartMin >= unavailableEndMin) {
         toast.error(`${formatDate(item.date)} の勤務不可時間が不正です`);
@@ -486,7 +517,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
     setApplying(true);
     try {
-      await applyToShift(shiftId, availableSchedules, desiredShiftsPerWeek);
+      await applyToShift(shiftId, availableSchedules, desiredShiftsPerWeek, submittedUnavailableRanges);
       toast.success('シフトに応募しました');
       setShowApplicationForm(false);
       await loadDetail();

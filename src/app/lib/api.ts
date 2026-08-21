@@ -736,7 +736,7 @@ export async function getShiftDetail(shiftId: number) {
   // シフト応募を取得
   const { data: applications, error: appError } = await supabase
     .from('shift_applications')
-    .select('id, user_email, user_name, status, applied_at, desired_shifts_per_week')
+    .select('id, user_email, user_name, status, applied_at, desired_shifts_per_week, submitted_unavailable_ranges')
     .eq('shift_id', shiftId);
   
   if (appError) throw appError;
@@ -817,7 +817,8 @@ export async function applyToShift(
     start_time: string;
     end_time: string;
   }>,
-  desiredShiftsPerWeek?: number
+  desiredShiftsPerWeek?: number,
+  submittedUnavailableRanges: Array<{ date: string; start_time: string; end_time: string }> = [],
 ) {
   const supabase = getSupabaseClient();
   const userEmail = auth.getEmail()?.trim().toLowerCase();
@@ -897,6 +898,7 @@ export async function applyToShift(
       .update({
         user_name: userName || 'Unknown',
         desired_shifts_per_week: desiredShiftsPerWeek || null,
+        submitted_unavailable_ranges: submittedUnavailableRanges,
         applied_at: new Date().toISOString(),
       })
       .eq('id', existing.id);
@@ -960,6 +962,7 @@ export async function applyToShift(
         user_name: userName || 'Unknown',
         status: 'pending',
         desired_shifts_per_week: desiredShiftsPerWeek || null,
+        submitted_unavailable_ranges: submittedUnavailableRanges,
       })
       .select()
       .single();
