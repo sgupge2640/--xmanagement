@@ -178,7 +178,12 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
       const currentUserApplication = data.applications
         .filter((app) => app.user_email.trim().toLowerCase() === currentUserEmail)
-        .sort((left, right) => right.applied_at.localeCompare(left.applied_at))[0];
+        .sort((left, right) => {
+          const leftHasSchedules = (left.daily_schedule?.length || 0) > 0 ? 1 : 0;
+          const rightHasSchedules = (right.daily_schedule?.length || 0) > 0 ? 1 : 0;
+          if (rightHasSchedules !== leftHasSchedules) return rightHasSchedules - leftHasSchedules;
+          return right.applied_at.localeCompare(left.applied_at);
+        })[0];
       const lockedDateSet = new Set(loadedPublishedDates);
       const userScheduleMap = new Map<string, DaySchedule[]>();
       (currentUserApplication?.daily_schedule || []).forEach((day: DaySchedule) => {
@@ -210,7 +215,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         }
 
         // 勤務不可日入力方式: checked=true を「勤務不可」として扱う
-        if (!currentUserApplication) {
+        if (!currentUserApplication || userScheduleMap.size === 0) {
           return item;
         }
 
@@ -769,7 +774,12 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
   const userApplication = applications
     .filter((app) => app.user_email.trim().toLowerCase() === currentUserEmail)
-    .sort((left, right) => right.applied_at.localeCompare(left.applied_at))[0];
+    .sort((left, right) => {
+      const leftHasSchedules = (left.daily_schedule?.length || 0) > 0 ? 1 : 0;
+      const rightHasSchedules = (right.daily_schedule?.length || 0) > 0 ? 1 : 0;
+      if (rightHasSchedules !== leftHasSchedules) return rightHasSchedules - leftHasSchedules;
+      return right.applied_at.localeCompare(left.applied_at);
+    })[0];
   const isDeadlinePassed = new Date(shift.application_deadline) < new Date();
   const applicantWeeklySummaries = applications
     .map((application) => {
