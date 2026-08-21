@@ -188,6 +188,17 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       });
       const shiftStart = data.shift.start_time.slice(0, 5);
       const shiftEnd = data.shift.end_time.slice(0, 5);
+      const dateCount = buildDateList(
+        data.shift.start_date,
+        data.shift.end_date,
+        data.shift.start_time,
+        data.shift.end_time,
+      ).length;
+      const hasFullShiftSchedule = [...userScheduleMap.values()]
+        .flat()
+        .some((day) => day.start_time.slice(0, 5) === shiftStart && day.end_time.slice(0, 5) === shiftEnd);
+      const isCurrentSchedule = userScheduleMap.size >= dateCount || hasFullShiftSchedule;
+      const isLegacyUnavailableOnly = userScheduleMap.size > 0 && !isCurrentSchedule;
 
       const schedules = buildDateList(
         data.shift.start_date,
@@ -216,10 +227,23 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
           return item;
         }
 
+        if (!userDay && isLegacyUnavailableOnly) {
+          return item;
+        }
+
         if (!userDay) {
           return {
             ...item,
             checked: true,
+          };
+        }
+
+        if (isLegacyUnavailableOnly) {
+          return {
+            ...item,
+            checked: true,
+            start_time: userDay.start_time,
+            end_time: userDay.end_time,
           };
         }
 
