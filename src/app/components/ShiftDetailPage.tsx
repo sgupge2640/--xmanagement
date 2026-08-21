@@ -561,9 +561,49 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
   const wishTimesMap = useMemo(() => {
     const map: { [email: string]: { [date: string]: { start: string; end: string }[] } } = {};
+    const shiftStart = shift.start_time.slice(0, 5);
+    const shiftEnd = shift.end_time.slice(0, 5);
+    const shiftStartMin = toMinutes(shiftStart);
+    const shiftEndMin = toMinutes(shiftEnd);
+
+    const formatTime = (minutes: number) =>
+      `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+    const getAvailableRanges = (
+      unavailableRanges: Array<{ start_time: string; end_time: string }>,
+    ) => {
+      const ranges = unavailableRanges
+        .map((range) => ({
+          start: Math.max(toMinutes(range.start_time.slice(0, 5)), shiftStartMin),
+          end: Math.min(toMinutes(range.end_time.slice(0, 5)), shiftEndMin),
+        }))
+        .filter((range) => range.start < range.end)
+        .sort((left, right) => left.start - right.start);
+      const available: { start: string; end: string }[] = [];
+      let cursor = shiftStartMin;
+      ranges.forEach((range) => {
+        if (range.start > cursor) {
+          available.push({ start: formatTime(cursor), end: formatTime(range.start) });
+        }
+        cursor = Math.max(cursor, range.end);
+      });
+      if (cursor < shiftEndMin) {
+        available.push({ start: formatTime(cursor), end: shiftEnd });
+      }
+      return available;
+    };
+
     Object.entries(dateApplications).forEach(([date, apps]) => {
       apps.forEach((app) => {
         if (!map[app.user_email]) map[app.user_email] = {};
+        const submittedUnavailable = detail?.applications
+          .find((application) => application.id === app.id)
+          ?.submitted_unavailable_ranges
+          ?.filter((range) => range.date === date) || [];
+        if (submittedUnavailable.length > 0) {
+          map[app.user_email][date] = getAvailableRanges(submittedUnavailable);
+          return;
+        }
         const ranges = map[app.user_email][date] || [];
         ranges.push({
           start: app.original_start_time,
