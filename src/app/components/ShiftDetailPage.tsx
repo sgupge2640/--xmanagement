@@ -192,8 +192,10 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       });
       const shiftStart = data.shift.start_time.slice(0, 5);
       const shiftEnd = data.shift.end_time.slice(0, 5);
-      const submittedUnavailableMap = new Map(
-        (currentUserApplication?.submitted_unavailable_ranges || []).map((range) => [range.date, range] as const),
+      const submittedUnavailableMap = new Map<string, { date: string; start_time: string; end_time: string }>(
+        (currentUserApplication?.submitted_unavailable_ranges || []).map(
+          (range: { date: string; start_time: string; end_time: string }) => [range.date, range] as const,
+        ),
       );
       const dateCount = buildDateList(
         data.shift.start_date,
@@ -596,10 +598,10 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
     Object.entries(dateApplications).forEach(([date, apps]) => {
       apps.forEach((app) => {
         if (!map[app.user_email]) map[app.user_email] = {};
-        const submittedUnavailable = detail?.applications
+        const submittedUnavailable: Array<{ date: string; start_time: string; end_time: string }> = detail?.applications
           .find((application) => application.id === app.id)
           ?.submitted_unavailable_ranges
-          ?.filter((range) => range.date === date) || [];
+          ?.filter((range: { date: string; start_time: string; end_time: string }) => range.date === date) || [];
         if (submittedUnavailable.length > 0) {
           map[app.user_email][date] = getAvailableRanges(submittedUnavailable);
           return;
