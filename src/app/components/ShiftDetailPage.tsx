@@ -563,8 +563,11 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
 
   const wishTimesMap = useMemo(() => {
     const map: { [email: string]: { [date: string]: { start: string; end: string }[] } } = {};
-    const shiftStart = shift.start_time.slice(0, 5);
-    const shiftEnd = shift.end_time.slice(0, 5);
+    const currentShift = detail?.shift;
+    if (!currentShift) return map;
+
+    const shiftStart = currentShift.start_time.slice(0, 5);
+    const shiftEnd = currentShift.end_time.slice(0, 5);
     const shiftStartMin = toMinutes(shiftStart);
     const shiftEndMin = toMinutes(shiftEnd);
 
@@ -615,7 +618,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       });
     });
     return map;
-  }, [dateApplications]);
+  }, [dateApplications, detail]);
 
   const updateApplicationDayStatus = (
     appId: number,
