@@ -806,7 +806,7 @@ export async function applyToShift(
   desiredShiftsPerWeek?: number
 ) {
   const supabase = getSupabaseClient();
-  const userEmail = auth.getEmail();
+  const userEmail = auth.getEmail()?.trim().toLowerCase();
   const userName = auth.getName();
 
   if (!userEmail) throw new Error('ログインが必要です');
@@ -831,7 +831,7 @@ export async function applyToShift(
     .from('shift_applications')
     .select('id')
     .eq('shift_id', shiftId)
-    .eq('user_email', userEmail)
+    .ilike('user_email', userEmail)
     .maybeSingle();
 
   let applicationId: number;

@@ -175,8 +175,10 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       const loadedPublishedDates = await getPublishedDates(shiftId).catch(() => []);
       setPublishedDates(loadedPublishedDates);
 
-      const currentUserEmail = localStorage.getItem('user_email') || '';
-      const currentUserApplication = data.applications.find((app) => app.user_email === currentUserEmail);
+      const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
+      const currentUserApplication = data.applications.find(
+        (app) => app.user_email.trim().toLowerCase() === currentUserEmail,
+      );
       const lockedDateSet = new Set(loadedPublishedDates);
       const userScheduleMap = new Map<string, DaySchedule[]>();
       (currentUserApplication?.daily_schedule || []).forEach((day: DaySchedule) => {
@@ -764,8 +766,10 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const { shift, applications, is_admin } = detail;
   const approvedCount = applications.filter((app) => app.status === 'approved' || app.status === 'partially_approved').length;
   const pendingCount = applications.filter((app) => app.status === 'pending').length;
-  const currentUserEmail = localStorage.getItem('user_email') || '';
-  const userApplication = applications.find((app) => app.user_email === currentUserEmail);
+  const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
+  const userApplication = applications.find(
+    (app) => app.user_email.trim().toLowerCase() === currentUserEmail,
+  );
   const isDeadlinePassed = new Date(shift.application_deadline) < new Date();
   const applicantWeeklySummaries = applications
     .map((application) => {

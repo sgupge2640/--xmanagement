@@ -169,7 +169,12 @@ export function AppliedShiftCalendar({
     const shiftDates = buildDateRange(startDate, endDate);
     if (shiftDates.length === 0) return [] as AppliedDay[];
 
-    const appliedMap = new Map(appliedDays.map((day) => [day.date, day] as const));
+    const appliedMap = new Map<string, AppliedDay[]>();
+    appliedDays.forEach((day) => {
+      const days = appliedMap.get(day.date) || [];
+      days.push(day);
+      appliedMap.set(day.date, days);
+    });
 
     const startCandidates = appliedDays.map((d) => d.start_time.slice(0, 5)).sort();
     const endCandidates = appliedDays.map((d) => d.end_time.slice(0, 5)).sort();
@@ -177,38 +182,48 @@ export function AppliedShiftCalendar({
     const fallbackEnd = shiftEndTime?.slice(0, 5) || endCandidates[endCandidates.length - 1] || '18:00';
 
     return shiftDates.flatMap((date) => {
-      const available = appliedMap.get(date);
+      const availableDays = appliedMap.get(date) || [];
 
-      if (!available) {
+      if (availableDays.length === 0) {
         return [{ date, start_time: fallbackStart, end_time: fallbackEnd, status: 'pending' }];
       }
 
-      const availableStart = available.start_time.slice(0, 5);
-      const availableEnd = available.end_time.slice(0, 5);
       const shiftStartMin = toMinutes(fallbackStart);
       const shiftEndMin = toMinutes(fallbackEnd);
-      const availableStartMin = toMinutes(availableStart);
-      const availableEndMin = toMinutes(availableEnd);
+      const ranges = availableDays
+        .map((day) => ({
+          start: toMinutes(day.start_time.slice(0, 5)),
+          end: toMinutes(day.end_time.slice(0, 5)),
+          status: day.status || 'pending',
+        }))
+        .sort((left, right) => left.start - right.start);
+      const unavailableRanges: AppliedDay[] = [];
+      let cursor = shiftStartMin;
 
-      if (availableStartMin > shiftStartMin && availableStartMin <= shiftEndMin) {
-        return [{
-          date,
-          start_time: fallbackStart,
-          end_time: availableStart,
-          status: available.status || 'pending',
-        }];
-      }
+      ranges.forEach((range) => {
+        const start = Math.max(range.start, shiftStartMin);
+        const end = Math.min(range.end, shiftEndMin);
+        if (start > cursor) {
+          unavailableRanges.push({
+            date,
+            start_time: `${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`,
+            end_time: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
+            status: range.status,
+          });
+        }
+        cursor = Math.max(cursor, end);
+      });
 
-      if (availableEndMin < shiftEndMin && availableEndMin >= shiftStartMin) {
-        return [{
+      if (cursor < shiftEndMin) {
+        unavailableRanges.push({
           date,
-          start_time: availableEnd,
+          start_time: `${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`,
           end_time: fallbackEnd,
-          status: available.status || 'pending',
-        }];
+          status: ranges[ranges.length - 1]?.status || 'pending',
+        });
       }
 
-      return [] as AppliedDay[];
+      return unavailableRanges;
     });
   }, [isResultsPublished, appliedDays, userEmail, approvedSlotsMap, startDate, endDate, shiftStartTime, shiftEndTime]);
 
