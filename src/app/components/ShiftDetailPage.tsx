@@ -176,9 +176,9 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       setPublishedDates(loadedPublishedDates);
 
       const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
-      const currentUserApplication = data.applications.find(
-        (app) => app.user_email.trim().toLowerCase() === currentUserEmail,
-      );
+      const currentUserApplication = data.applications
+        .filter((app) => app.user_email.trim().toLowerCase() === currentUserEmail)
+        .sort((left, right) => right.applied_at.localeCompare(left.applied_at))[0];
       const lockedDateSet = new Set(loadedPublishedDates);
       const userScheduleMap = new Map<string, DaySchedule[]>();
       (currentUserApplication?.daily_schedule || []).forEach((day: DaySchedule) => {
@@ -767,9 +767,9 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
   const approvedCount = applications.filter((app) => app.status === 'approved' || app.status === 'partially_approved').length;
   const pendingCount = applications.filter((app) => app.status === 'pending').length;
   const currentUserEmail = (localStorage.getItem('user_email') || '').trim().toLowerCase();
-  const userApplication = applications.find(
-    (app) => app.user_email.trim().toLowerCase() === currentUserEmail,
-  );
+  const userApplication = applications
+    .filter((app) => app.user_email.trim().toLowerCase() === currentUserEmail)
+    .sort((left, right) => right.applied_at.localeCompare(left.applied_at))[0];
   const isDeadlinePassed = new Date(shift.application_deadline) < new Date();
   const applicantWeeklySummaries = applications
     .map((application) => {
@@ -884,6 +884,7 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
                   <div className="border-t pt-3">
                     <h4 className="text-sm font-medium text-gray-700 mb-3">あなたの応募内容</h4>
                     <AppliedShiftCalendar
+                      key={`${shift.id}-${userApplication.applied_at}`}
                       appliedDays={userApplication.daily_schedule}
                       startDate={shift.start_date}
                       endDate={shift.end_date}
