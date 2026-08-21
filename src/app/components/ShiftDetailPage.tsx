@@ -188,10 +188,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       });
       const shiftStart = data.shift.start_time.slice(0, 5);
       const shiftEnd = data.shift.end_time.slice(0, 5);
-      const hasFullShiftSchedule = [...userScheduleMap.values()]
-        .flat()
-        .some((day) => day.start_time.slice(0, 5) === shiftStart && day.end_time.slice(0, 5) === shiftEnd);
-      const isLegacyUnavailableOnly = userScheduleMap.size > 0 && !hasFullShiftSchedule;
 
       const schedules = buildDateList(
         data.shift.start_date,
@@ -218,16 +214,6 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         // 勤務不可日入力方式: checked=true を「勤務不可」として扱う
         if (!currentUserApplication || userScheduleMap.size === 0) {
           return item;
-        }
-
-        if (isLegacyUnavailableOnly) {
-          if (!userDay) return item;
-          return {
-            ...item,
-            checked: true,
-            start_time: userDay.start_time,
-            end_time: userDay.end_time,
-          };
         }
 
         if (!userDay) {
