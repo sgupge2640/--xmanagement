@@ -178,9 +178,12 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
       const currentUserEmail = localStorage.getItem('user_email') || '';
       const currentUserApplication = data.applications.find((app) => app.user_email === currentUserEmail);
       const lockedDateSet = new Set(loadedPublishedDates);
-      const userScheduleMap = new Map<string, DaySchedule>(
-        (currentUserApplication?.daily_schedule || []).map((day: DaySchedule) => [day.date, day] as const),
-      );
+      const userScheduleMap = new Map<string, DaySchedule[]>();
+      (currentUserApplication?.daily_schedule || []).forEach((day: DaySchedule) => {
+        const schedules = userScheduleMap.get(day.date) || [];
+        schedules.push(day);
+        userScheduleMap.set(day.date, schedules);
+      });
 
       const schedules = buildDateList(
         data.shift.start_date,
@@ -188,7 +191,8 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         data.shift.start_time,
         data.shift.end_time,
       ).map((item) => {
-        const userDay = userScheduleMap.get(item.date);
+        const userDays = userScheduleMap.get(item.date) || [];
+        const userDay = userDays[0];
         const shiftStart = item.start_time.slice(0, 5);
         const shiftEnd = item.end_time.slice(0, 5);
         const shiftStartMin = toMinutes(shiftStart);
@@ -215,8 +219,26 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
           };
         }
 
-        const availableStart = userDay.start_time.slice(0, 5);
-        const availableEnd = userDay.end_time.slice(0, 5);
+        const availableSchedules = userDays
+          .map((day) => ({
+            start: day.start_time.slice(0, 5),
+            end: day.end_time.slice(0, 5),
+          }))
+          .sort((left, right) => left.start.localeCompare(right.start));
+
+        if (availableSchedules.length > 1) {
+          const first = availableSchedules[0];
+          const second = availableSchedules[1];
+          return {
+            ...item,
+            checked: true,
+            start_time: first.end,
+            end_time: second.start,
+          };
+        }
+
+        const availableStart = availableSchedules[0].start;
+        const availableEnd = availableSchedules[0].end;
         const availableStartMin = toMinutes(availableStart);
         const availableEndMin = toMinutes(availableEnd);
 
@@ -412,8 +434,18 @@ export function ShiftDetailPage({ shiftId, groupId, onBack }: ShiftDetailPagePro
         continue;
       }
 
-      toast.error(`${formatDate(item.date)} は中抜けの勤務不可時間を設定できません（開始側か終了側に寄せてください）`);
-      return;
+      availableSchedules.push(
+        {
+          date: item.date,
+          start_time: shiftStart,
+          end_time: unavailableStart,
+        },
+        {
+          date: item.date,
+          start_time: unavailableEnd,
+          end_time: shiftEnd,
+        },
+      );
     }
 
     if (availableSchedules.length === 0) {

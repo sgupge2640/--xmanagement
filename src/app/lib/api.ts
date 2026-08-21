@@ -845,12 +845,8 @@ export async function applyToShift(
     if (existingSchedulesError) throw existingSchedulesError;
 
     const editableExisting = (existingSchedules || []).filter((item: { id: number; date: string }) => !lockedDateSet.has(item.date));
-    const editableDateSet = new Set(editableExisting.map((item: { id: number; date: string }) => item.date));
-    const submittedByDate = new Map(dailySchedule.map((item) => [item.date, item] as const));
 
-    const deleteIds = editableExisting
-      .filter((item: { id: number; date: string }) => !submittedByDate.has(item.date))
-      .map((item: { id: number; date: string }) => item.id);
+    const deleteIds = editableExisting.map((item: { id: number; date: string }) => item.id);
 
     if (deleteIds.length > 0) {
       const { error: scheduleDeleteError } = await supabase
@@ -861,23 +857,8 @@ export async function applyToShift(
       if (scheduleDeleteError) throw scheduleDeleteError;
     }
 
-    for (const item of editableExisting) {
-      const submitted = submittedByDate.get(item.date);
-      if (!submitted) continue;
-      const { error: updateScheduleError } = await supabase
-        .from('daily_schedules')
-        .update({
-          start_time: submitted.start_time,
-          end_time: submitted.end_time,
-          status: 'pending',
-        })
-        .eq('id', item.id);
-
-      if (updateScheduleError) throw updateScheduleError;
-    }
-
     const insertSchedules = dailySchedule
-      .filter((item) => !editableDateSet.has(item.date))
+      .filter((item) => !lockedDateSet.has(item.date))
       .map((item) => ({
         application_id: existing.id,
         date: item.date,
