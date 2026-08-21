@@ -734,11 +734,21 @@ export async function getShiftDetail(shiftId: number) {
   if (shiftError) throw shiftError;
   
   // シフト応募を取得
-  const { data: applications, error: appError } = await supabase
+  let { data: applications, error: appError } = await supabase
     .from('shift_applications')
     .select('id, user_email, user_name, status, applied_at, desired_shifts_per_week, submitted_unavailable_ranges')
     .eq('shift_id', shiftId);
-  
+
+  // Allow the app to keep working while the migration is being applied.
+  if (appError) {
+    const fallback = await supabase
+      .from('shift_applications')
+      .select('id, user_email, user_name, status, applied_at, desired_shifts_per_week')
+      .eq('shift_id', shiftId);
+    applications = fallback.data;
+    appError = fallback.error;
+  }
+
   if (appError) throw appError;
 
   const latestApplicationsByEmail = new Map<string, any>();
@@ -893,7 +903,7 @@ export async function applyToShift(
       if (insertScheduleError) throw insertScheduleError;
     }
 
-    const { error: appUpdateError } = await supabase
+    const updateWithRanges = await supabase
       .from('shift_applications')
       .update({
         user_name: userName || 'Unknown',
@@ -903,7 +913,17 @@ export async function applyToShift(
       })
       .eq('id', existing.id);
 
-    if (appUpdateError) throw appUpdateError;
+    if (updateWithRanges.error) {
+      const fallbackUpdate = await supabase
+        .from('shift_applications')
+        .update({
+          user_name: userName || 'Unknown',
+          desired_shifts_per_week: desiredShiftsPerWeek || null,
+          applied_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+      if (fallbackUpdate.error) throw fallbackUpdate.error;
+    }
 
     // 以前の採用スロットは未発表日のみクリア（発表済み日は保持）
     const approvedSlotsMap = await getApprovedSlotsMap(shiftId);
@@ -954,7 +974,7 @@ export async function applyToShift(
 
     applicationId = existing.id;
   } else {
-    const { data: application, error: appError } = await supabase
+    let { data: application, error: appError } = await supabase
       .from('shift_applications')
       .insert({
         shift_id: shiftId,
@@ -966,6 +986,22 @@ export async function applyToShift(
       })
       .select()
       .single();
+
+    if (appError) {
+      const fallback = await supabase
+        .from('shift_applications')
+        .insert({
+          shift_id: shiftId,
+          user_email: userEmail,
+          user_name: userName || 'Unknown',
+          status: 'pending',
+          desired_shifts_per_week: desiredShiftsPerWeek || null,
+        })
+        .select()
+        .single();
+      application = fallback.data;
+      appError = fallback.error;
+    }
 
     if (appError) throw appError;
 
